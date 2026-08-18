@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "PT Fronteira",
-    "slug": "PT-Frointeira",
-    "version": "1.0.0",
+    "name": "PET Fronteira",
+    "slug": "PET-Frointeira",
+    "version": "1.0.0",  
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "ptfrointeira",
+    "scheme": "petfrointeira",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon"
@@ -22,8 +22,8 @@
     "web": {
       "output": "static",
       "favicon": "./assets/images/icon.png",
-      "name": "PT Fronteira - Campus de Ponta Porã",
-      "shortName": "PT Fronteira",
+      "name": "PET Fronteira - Campus de Ponta Porã",
+      "shortName": "PET Fronteira",
       "lang": "pt-BR"
     },
     "plugins": [

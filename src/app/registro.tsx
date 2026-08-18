@@ -16,71 +16,100 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, Stack, router } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 
+// 1. Importando o Supabase
+import { supabase } from '../utils/supabase';
+
+// Lista de cargos disponíveis
+const CARGOS_DISPONIVEIS = [
+  'Petiano Admin',
+  'Petiano Bolsista',
+  'Petiano',
+  'Petiano auxiliar'
+];
+
 export default function RegistroScreen() {
   const [form, setForm] = useState({
     nome: '',
     email: '',
     senha: '',
     confirmarSenha: '',
+    cargo: 'Petiano', // Cargo padrão selecionado
   });
   const [loading, setLoading] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [mostrarConfirmarSenha, setMostrarConfirmarSenha] = useState(false);
 
   const handleRegistro = async () => {
-    // Validação dos campos
+    console.log("1. Iniciando validação...");
+    
     if (!form.nome || !form.email || !form.senha || !form.confirmarSenha) {
+      console.log("Erro: Campos vazios");
       Alert.alert('Erro', 'Por favor, preencha todos os campos');
       return;
     }
 
     if (form.nome.length < 3) {
+      console.log("Erro: Nome muito curto");
       Alert.alert('Erro', 'O nome deve ter no mínimo 3 caracteres');
       return;
     }
 
-    if (!form.email.includes('@') || !form.email.includes('.')) {
+    if (!form.email.includes('@')) {
+      console.log("Erro: Email inválido");
       Alert.alert('Erro', 'Por favor, insira um e-mail válido');
       return;
     }
 
-    if (form.senha.length < 6) {
-      Alert.alert('Erro', 'A senha deve ter no mínimo 6 caracteres');
+    // Reduzido para 3 caracteres para você conseguir testar a senha "123"
+    if (form.senha.length < 3) {
+      console.log("Erro: Senha muito curta");
+      Alert.alert('Erro', 'A senha deve ter no mínimo 3 caracteres');
       return;
     }
 
     if (form.senha !== form.confirmarSenha) {
+      console.log("Erro: Senhas não batem");
       Alert.alert('Erro', 'As senhas não coincidem');
       return;
     }
 
+    console.log("2. Validação ok. Enviando para o Supabase: ", form.email, form.cargo);
     setLoading(true);
 
-    // Simulação de registro (substituir pela chamada real à API)
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Simulação de sucesso
-      Alert.alert(
-        'Sucesso!',
-        'Conta criada com sucesso! Faça login para continuar.',
-        [
-          {
-            text: 'Fazer Login',
-            onPress: () => router.replace('/login'),
-          },
-        ]
-      );
-      
-      // Limpar formulário
-      setForm({
-        nome: '',
-        email: '',
-        senha: '',
-        confirmarSenha: '',
+      const { data, error } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.senha,
+        options: {
+          data: {
+            full_name: form.nome,
+            cargo: form.cargo,
+          }
+        }
       });
+
+      console.log("3. Resposta do Supabase:", { data, error });
+
+      if (error) {
+        Alert.alert('Erro ao criar conta', error.message);
+        return;
+      }
+
+      // Correção para funcionar perfeitamente na Web e no Celular
+      if (Platform.OS === 'web') {
+        window.alert('Conta criada com sucesso! Redirecionando para o login...');
+        router.replace('/login');
+      } else {
+        Alert.alert(
+          'Sucesso!',
+          'Conta criada com sucesso! Faça login para continuar.',
+          [{ text: 'Fazer Login', onPress: () => router.replace('/login') }]
+        );
+      }
+      
     } catch (error) {
-      Alert.alert('Erro', 'Falha ao criar conta. Tente novamente.');
+      console.error("Erro grave de conexão:", error);
+      Alert.alert('Erro', 'Falha ao conectar com o servidor.');
     } finally {
       setLoading(false);
     }
@@ -106,7 +135,6 @@ export default function RegistroScreen() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {/* Header com botão voltar */}
               <TouchableOpacity 
                 onPress={() => router.back()} 
                 style={styles.backButton}
@@ -114,7 +142,6 @@ export default function RegistroScreen() {
                 <Text style={styles.backButtonText}>← Voltar</Text>
               </TouchableOpacity>
 
-              {/* Logo */}
               <View style={styles.logoContainer}>
                 <Image 
                   source={require('@/assets/images/icon.png')} 
@@ -125,9 +152,8 @@ export default function RegistroScreen() {
                 <Text style={styles.subtitle}>Junte-se ao PT Fronteira</Text>
               </View>
 
-              {/* Formulário */}
               <View style={styles.formContainer}>
-                {/* Nome */}
+                
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Nome Completo</Text>
                   <TextInput
@@ -140,7 +166,31 @@ export default function RegistroScreen() {
                   />
                 </View>
 
-                {/* Email */}
+                {/* NOVO: Seleção de Cargo */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Cargo / Tipo de Conta</Text>
+                  <View style={styles.cargosContainer}>
+                    {CARGOS_DISPONIVEIS.map((cargo) => (
+                      <TouchableOpacity
+                        key={cargo}
+                        style={[
+                          styles.cargoButton,
+                          form.cargo === cargo && styles.cargoButtonActive
+                        ]}
+                        onPress={() => setForm({...form, cargo: cargo})}
+                        disabled={loading}
+                      >
+                        <Text style={[
+                          styles.cargoText,
+                          form.cargo === cargo && styles.cargoTextActive
+                        ]}>
+                          {cargo}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>E-mail</Text>
                   <TextInput
@@ -155,7 +205,6 @@ export default function RegistroScreen() {
                   />
                 </View>
 
-                {/* Senha */}
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Senha</Text>
                   <View style={styles.passwordContainer}>
@@ -179,7 +228,6 @@ export default function RegistroScreen() {
                   </View>
                 </View>
 
-                {/* Confirmar Senha */}
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Confirmar Senha</Text>
                   <View style={styles.passwordContainer}>
@@ -203,20 +251,6 @@ export default function RegistroScreen() {
                   </View>
                 </View>
 
-                {/* Termos e Condições */}
-                <View style={styles.termsContainer}>
-                  <TouchableOpacity style={styles.checkboxContainer}>
-                    <View style={styles.checkbox} />
-                    <Text style={styles.termsText}>
-                      Li e concordo com os{' '}
-                      <Text style={styles.termsLink}>Termos de Uso</Text>
-                      {' e '}
-                      <Text style={styles.termsLink}>Política de Privacidade</Text>
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Botão Registrar */}
                 <TouchableOpacity 
                   style={[styles.registerButton, loading && styles.registerButtonDisabled]}
                   onPress={handleRegistro}
@@ -229,7 +263,6 @@ export default function RegistroScreen() {
                   )}
                 </TouchableOpacity>
 
-                {/* Link para Login */}
                 <View style={styles.loginContainer}>
                   <Text style={styles.loginText}>Já tem uma conta? </Text>
                   <Link href="/login" asChild>
@@ -237,31 +270,6 @@ export default function RegistroScreen() {
                       <Text style={styles.loginLink}>Faça Login</Text>
                     </TouchableOpacity>
                   </Link>
-                </View>
-
-                {/* Separador */}
-                <View style={styles.divider}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>ou</Text>
-                  <View style={styles.dividerLine} />
-                </View>
-
-                {/* Registro Social - Placeholder */}
-                <View style={styles.socialButtons}>
-                  <TouchableOpacity style={styles.socialButton}>
-                    <Text style={styles.socialButtonText}>Google</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.socialButton}>
-                    <Text style={styles.socialButtonText}>Facebook</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Informação de segurança */}
-                <View style={styles.securityContainer}>
-                  <Text style={styles.securityText}>🔒</Text>
-                  <Text style={styles.securityText}>
-                    Suas informações estão seguras conosco
-                  </Text>
                 </View>
               </View>
             </ScrollView>
@@ -273,185 +281,62 @@ export default function RegistroScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#11121C',
-  },
-  safeArea: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 30,
-  },
-  backButton: {
-    marginBottom: 12,
-    paddingVertical: 8,
-  },
-  backButtonText: {
-    color: '#F0502D',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  logo: {
-    width: 70,
-    height: 70,
-    borderRadius: 20,
-    marginBottom: 12,
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 26,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  subtitle: {
-    color: '#999',
-    fontSize: 15,
-  },
-  formContainer: {
-    flex: 1,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    color: '#CCCCCC',
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 6,
-  },
+  container: { flex: 1, backgroundColor: '#11121C' },
+  safeArea: { flex: 1 },
+  keyboardView: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 30 },
+  backButton: { marginBottom: 12, paddingVertical: 8 },
+  backButtonText: { color: '#F0502D', fontSize: 16, fontWeight: '500' },
+  logoContainer: { alignItems: 'center', marginBottom: 24 },
+  logo: { width: 70, height: 70, borderRadius: 20, marginBottom: 12 },
+  title: { color: '#FFFFFF', fontSize: 26, fontWeight: 'bold', marginBottom: 4 },
+  subtitle: { color: '#999', fontSize: 15 },
+  formContainer: { flex: 1 },
+  inputGroup: { marginBottom: 16 },
+  label: { color: '#CCCCCC', fontSize: 14, fontWeight: '500', marginBottom: 6 },
   input: {
-    backgroundColor: '#1c1d2b',
-    borderRadius: 8,
-    padding: 14,
-    color: '#FFFFFF',
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#2a2b3d',
+    backgroundColor: '#1c1d2b', borderRadius: 8, padding: 14,
+    color: '#FFFFFF', fontSize: 16, borderWidth: 1, borderColor: '#2a2b3d',
   },
-  passwordContainer: {
-    position: 'relative',
-  },
-  passwordInput: {
-    paddingRight: 50,
-  },
-  eyeButton: {
-    position: 'absolute',
-    right: 14,
-    top: 14,
-  },
-  eyeButtonText: {
-    fontSize: 20,
-  },
-  termsContainer: {
-    marginBottom: 20,
-  },
-  checkboxContainer: {
+  
+  // NOVOS ESTILOS PARA OS CARGOS
+  cargosContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderWidth: 2,
-    borderColor: '#F0502D',
-    borderRadius: 4,
-    marginRight: 10,
-    backgroundColor: 'transparent',
-  },
-  termsText: {
-    color: '#999',
-    fontSize: 13,
-    flex: 1,
-  },
-  termsLink: {
-    color: '#F0502D',
-    fontWeight: '500',
-  },
-  registerButton: {
-    backgroundColor: '#F0502D',
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  registerButtonDisabled: {
-    opacity: 0.7,
-  },
-  registerButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  loginContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  loginText: {
-    color: '#999',
-    fontSize: 14,
-  },
-  loginLink: {
-    color: '#F0502D',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#2a2b3d',
-  },
-  dividerText: {
-    color: '#666',
-    paddingHorizontal: 16,
-    fontSize: 14,
-  },
-  socialButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 16,
-  },
-  socialButton: {
-    flex: 1,
-    backgroundColor: '#1c1d2b',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#2a2b3d',
-  },
-  socialButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  securityContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexWrap: 'wrap',
     gap: 8,
-    paddingVertical: 10,
   },
-  securityText: {
-    color: '#666',
-    fontSize: 12,
-    textAlign: 'center',
+  cargoButton: {
+    backgroundColor: '#1c1d2b',
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
+  cargoButtonActive: {
+    backgroundColor: '#F0502D',
+    borderColor: '#F0502D',
+  },
+  cargoText: {
+    color: '#999',
+    fontSize: 14,
+  },
+  cargoTextActive: {
+    color: '#FFF',
+    fontWeight: 'bold',
+  },
+
+  passwordContainer: { position: 'relative' },
+  passwordInput: { paddingRight: 50 },
+  eyeButton: { position: 'absolute', right: 14, top: 14 },
+  eyeButtonText: { fontSize: 20 },
+  registerButton: {
+    backgroundColor: '#F0502D', paddingVertical: 16, borderRadius: 8,
+    alignItems: 'center', marginBottom: 14, marginTop: 10,
+  },
+  registerButtonDisabled: { opacity: 0.7 },
+  registerButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
+  loginContainer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 20 },
+  loginText: { color: '#999', fontSize: 14 },
+  loginLink: { color: '#F0502D', fontSize: 14, fontWeight: 'bold' },
 });

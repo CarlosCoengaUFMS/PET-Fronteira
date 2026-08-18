@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { supabase } from '@/utils/supabase';
 import {
   View,
   Text,
@@ -34,26 +35,25 @@ export default function LoginScreen() {
       return;
     }
 
-    if (senha.length < 6) {
-      Alert.alert('Erro', 'A senha deve ter no mínimo 6 caracteres');
-      return;
-    }
-
     setLoading(true);
 
-    // Simulação de login (substituir pela chamada real à API)
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Credenciais de exemplo (apenas para demonstração)
-      if (email === 'teste@ufms.br' && senha === '123456') {
+      // Chamada real à API do Supabase
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: senha,
+      });
+
+      if (error) {
+        // Se o Supabase retornar um erro (ex: senha errada), mostramos ao usuário
+        Alert.alert('Erro no Login', error.message);
+      } else {
+        // Se deu tudo certo, redireciona para a home
         Alert.alert('Sucesso', 'Login realizado com sucesso!');
         router.replace('/');
-      } else {
-        Alert.alert('Erro', 'E-mail ou senha incorretos');
       }
     } catch (error) {
-      Alert.alert('Erro', 'Falha ao realizar login. Tente novamente.');
+      Alert.alert('Erro', 'Falha ao conectar. Tente novamente.');
     } finally {
       setLoading(false);
     }
