@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as Device from 'expo-device';
-import { Platform, StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, TextInput, Modal, Alert } from 'react-native';
+import { Platform, StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Modal, Alert, Animated, Easing, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Link, Stack, router } from 'expo-router'; 
+import { Link, Stack, router } from 'expo-router';
 import Svg, { Path, Rect, Circle } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Spacing } from '@/constants/theme';
 
-// 1. Importando o Supabase
+// Supabase
 import { supabase } from '../utils/supabase';
 
+// --- ÍCONES DO HEADER E NAVEGAÇÃO ---
 const MenuIconSvg = () => (
   <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
     <Rect x="3" y="4" width="18" height="2.5" rx="1" fill="#FFFFFF" />
@@ -60,11 +60,131 @@ const LogoutIconSvg = () => (
   </Svg>
 );
 
+// --- ÍCONE: SETA DO FOOTER ---
+const ChevronIconSvg = ({ expanded }: { expanded: boolean }) => (
+  <Svg
+    width={24}
+    height={24}
+    viewBox="0 0 24 24"
+    fill="none"
+    style={{ transform: [{ rotate: expanded ? '180deg' : '0deg' }] }}
+  >
+    <Path d="M18 15l-6-6-6 6" stroke="#F0502D" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+// --- ÍCONE: FACEBOOK (Redes Sociais) ---
+const FacebookIconSvg = ({ size = 20 }: { size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M22 12a10 10 0 1 0-11.56 9.88v-6.99H7.9V12h2.54V9.8c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56V12h2.78l-.44 2.89h-2.34v6.99A10 10 0 0 0 22 12z"
+      fill="#F0502D"
+    />
+  </Svg>
+);
+// --- ÍCONE: INSTAGRAM ---
+const InstagramIconSvg = ({ size = 22 }: { size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect
+      x="3"
+      y="3"
+      width="18"
+      height="18"
+      rx="5"
+      stroke="#F0502D"
+      strokeWidth="2"
+    />
+    <Circle
+      cx="12"
+      cy="12"
+      r="4"
+      stroke="#F0502D"
+      strokeWidth="2"
+    />
+    <Circle
+      cx="17.5"
+      cy="6.5"
+      r="1"
+      fill="#F0502D"
+    />
+  </Svg>
+);
+// --- ÍCONES DAS RECURSOS DA SEÇÃO "O QUE O PET PROPORCIONA" ---
+const SearchIcon = () => (
+  <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+    <Circle cx="11" cy="11" r="7" stroke="#F0502D" strokeWidth="2" />
+    <Path d="M20 20L16 16" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+const EaselIcon = () => (
+  <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+    <Rect x="3" y="4" width="18" height="11" rx="2" stroke="#F0502D" strokeWidth="2" />
+    <Path d="M12 15v5M8 20l1-5M16 20l-1-5M8 4V2M16 4V2" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+const PeopleIcon = () => (
+  <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+    <Path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" />
+    <Circle cx="9" cy="7" r="4" stroke="#F0502D" strokeWidth="2" />
+    <Path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+const DocumentIcon = () => (
+  <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+    <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" />
+    <Path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+const ToolsIcon = () => (
+  <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+    <Path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const MicIcon = () => (
+  <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+    <Rect x="9" y="2" width="6" height="12" rx="3" stroke="#F0502D" strokeWidth="2" />
+    <Path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4M8 22h8" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+const MonitorIcon = () => (
+  <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="8" r="4" stroke="#F0502D" strokeWidth="2" />
+    <Path d="M6 21v-2a6 6 0 0 1 12 0v2" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+const DollarIcon = () => (
+  <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="9" stroke="#F0502D" strokeWidth="2" />
+    <Path d="M12 6v12M15 9.5c0-1.38-1.34-2.5-3-2.5s-3 1.12-3 2.5 1.34 2.5 3 2.5 3 1.12 3 2.5-1.34 2.5-3 2.5-3-1.12-3-2.5" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
 export default function HomeScreen() {
   const [menuAberto, setMenuAberto] = useState(false);
   const [userMenuAberto, setUserMenuAberto] = useState(false);
-  
-  // 2. Estados reais de autenticação (iniciam vazios/falsos)
+
+  // --- ESTADO E ANIMAÇÃO DO FOOTER FLUTUANTE ---
+  const [footerVisivel, setFooterVisivel] = useState(false);
+  const footerAnim = useRef(new Animated.Value(0)).current;
+
+  const toggleFooter = () => {
+    const abrindo = !footerVisivel;
+    setFooterVisivel(abrindo);
+    Animated.timing(footerAnim, {
+      toValue: abrindo ? 1 : 0,
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  };
+
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userData, setUserData] = useState({
     nome: '',
@@ -73,14 +193,11 @@ export default function HomeScreen() {
     avatar: null
   });
 
-  // 3. Efeito para carregar os dados do Supabase ao abrir a tela
   useEffect(() => {
-    // Busca a sessão atual assim que a tela carrega
     supabase.auth.getSession().then(({ data: { session } }) => {
       atualizarDadosDoUsuario(session);
     });
 
-    // Fica "escutando" se o usuário fez login ou logout em outra tela
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       atualizarDadosDoUsuario(session);
     });
@@ -88,7 +205,6 @@ export default function HomeScreen() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Função auxiliar para atualizar o estado
   const atualizarDadosDoUsuario = (session: any) => {
     if (session?.user) {
       setIsLoggedIn(true);
@@ -104,12 +220,11 @@ export default function HomeScreen() {
     }
   };
 
-  // 4. Função de Logout Real no Supabase
   const handleLogout = async () => {
-    await supabase.auth.signOut(); // Desconecta do banco de dados
+    await supabase.auth.signOut();
     setUserMenuAberto(false);
     setMenuAberto(false);
-    
+
     if (Platform.OS === 'web') {
       window.alert('Você saiu da conta.');
     } else {
@@ -125,24 +240,34 @@ export default function HomeScreen() {
     }
   };
 
+  const abrirLink = (url: string) => {
+    Linking.openURL(url).catch(() => {
+      if (Platform.OS === 'web') {
+        window.alert('Não foi possível abrir o link.');
+      } else {
+        Alert.alert('Erro', 'Não foi possível abrir o link.');
+      }
+    });
+  };
+
   return (
     <>
-      <Stack.Screen 
+      <Stack.Screen
         options={{
           title: 'PET Fronteira',
           headerShown: false,
-        }} 
+        }}
       />
-      
+
       <ThemedView style={styles.container}>
         <SafeAreaView style={styles.safeArea}>
-          
+
           {/* --- HEADER --- */}
           <View style={styles.header}>
             <View style={styles.headerContent}>
               <View style={styles.logoContainer}>
-                <Image 
-                  source={require('@/assets/images/icon.png')} 
+                <Image
+                  source={require('@/assets/images/icon.png')}
                   style={styles.logoImage}
                   resizeMode="contain"
                 />
@@ -151,16 +276,15 @@ export default function HomeScreen() {
                   <Text style={styles.logoSubtitle}>Campus de Ponta Porã</Text>
                 </View>
               </View>
-              
+
               <View style={styles.headerButtons}>
-                {/* Botão de Usuário/Perfil */}
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={handleUserIconPress}
                   style={styles.userButton}
                 >
                   {isLoggedIn && userData.avatar ? (
-                    <Image 
-                      source={{ uri: userData.avatar }} 
+                    <Image
+                      source={{ uri: userData.avatar }}
                       style={styles.userAvatar}
                     />
                   ) : (
@@ -172,8 +296,7 @@ export default function HomeScreen() {
                     </View>
                   )}
                 </TouchableOpacity>
-                
-                {/* Botão Hamburguer */}
+
                 <TouchableOpacity onPress={() => setMenuAberto(true)} style={styles.hamburgerBtn}>
                   <MenuIconSvg />
                 </TouchableOpacity>
@@ -194,12 +317,11 @@ export default function HomeScreen() {
                   <Link href="/sobre" style={styles.navLink} onPress={() => setMenuAberto(false)}>Sobre</Link>
                   <Link href="/projetos" style={styles.navLink} onPress={() => setMenuAberto(false)}>Projetos</Link>
                   <Link href="/contato" style={styles.navLink} onPress={() => setMenuAberto(false)}>Contato</Link>
-                  
+
                   <View style={styles.menuSeparator} />
-                  
-                  {/* LOGIN/LOGOUT NO MENU HAMBURGUER */}
+
                   {isLoggedIn ? (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.loginButton}
                       onPress={handleLogout}
                     >
@@ -208,7 +330,7 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                   ) : (
                     <Link href="/login" asChild>
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         style={styles.loginButton}
                         onPress={() => setMenuAberto(false)}
                       >
@@ -233,7 +355,6 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Informações Reais do Usuário */}
                 <View style={styles.userInfoSection}>
                   <View style={styles.userAvatarLarge}>
                     {userData.avatar ? (
@@ -247,13 +368,12 @@ export default function HomeScreen() {
                   </View>
                   <Text style={styles.userName}>{userData.nome}</Text>
                   <Text style={styles.userEmail}>{userData.email}</Text>
-                  {/* Exibindo o Cargo */}
                   <Text style={styles.userRole}>{userData.cargo}</Text>
                 </View>
 
                 <View style={styles.userMenuOptions}>
                   <Link href="/editar-perfil" asChild>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.userMenuOption}
                       onPress={() => setUserMenuAberto(false)}
                     >
@@ -263,7 +383,7 @@ export default function HomeScreen() {
                   </Link>
 
                   <Link href="/configuracoes" asChild>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.userMenuOption}
                       onPress={() => setUserMenuAberto(false)}
                     >
@@ -274,7 +394,7 @@ export default function HomeScreen() {
 
                   <View style={styles.userMenuSeparator} />
 
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.logoutButton}
                     onPress={handleLogout}
                   >
@@ -286,14 +406,14 @@ export default function HomeScreen() {
             </View>
           </Modal>
 
-          {/* --- CONTEÚDO --- */}
+          {/* --- CONTEÚDO PRINCIPAL --- */}
           <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-            
+
             {/* Hero Section */}
             <View style={styles.hero}>
               <Text style={styles.heroTitle}>PET Fronteira do Campus de Ponta Porã</Text>
               <Text style={styles.heroSubtitle}>Unindo forças pela educação, cultura e desenvolvimento da região de fronteira</Text>
-              
+
               {isLoggedIn ? (
                 <View style={styles.heroButtons}>
                   <Link href="/projetos" asChild>
@@ -331,50 +451,217 @@ export default function HomeScreen() {
               </View>
             )}
 
-          </ScrollView>
+            {/* --- SEÇÃO: QUEM SOMOS --- */}
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>
+                Quem somos<Text style={styles.orangeHighlight}>?</Text>
+              </Text>
+              <Text style={styles.sectionSubtitle}>
+                Conheça o Programa de Educação Tutorial (PET) da UFMS.
+              </Text>
 
-        </SafeAreaView>
-        
-        {/* --- FOOTER --- */}
-        <View style={styles.footer}>
-          <View style={styles.footerContent}>
-            <View style={styles.footerSection}>
-              <Text style={styles.footerTitle}>PET Fronteira</Text>
-              <Text style={styles.footerText}>UFMS Universidade Federal de Mato Grosso do Sul</Text>
-              <Text style={styles.footerText}>Campus de Ponta Porã</Text>
-            </View>
-            
-            <View style={styles.footerSection}>
-              <Text style={styles.footerTitle}>Links Rápidos</Text>
-              <Link href="/sobre" style={styles.footerLink}>Sobre</Link>
-              <Link href="/projetos" style={styles.footerLink}>Projetos</Link>
-              <Link href="/contato" style={styles.footerLink}>Contato</Link>
-            </View>
-            
-            <View style={styles.footerSection}>
-              <Text style={styles.footerTitle}>Redes Sociais</Text>
-              <View style={styles.socialLinks}>
-                <Link href="https://www.instagram.com/petfronteira?igsh=aWZiajhvcTYyOWUz" style={styles.socialLink}>Instagram</Link>
+              <View style={styles.aboutCardsContainer}>
+                <View style={styles.aboutCard}>
+                  <Text style={styles.aboutCardText}>
+                    O Programa de Educação Tutorial (PET) é uma iniciativa do Ministério da Educação (MEC) criado para promover a indissociabilidade entre ensino, pesquisa e extensão nas universidades brasileiras. Na UFMS, o PET visa aprimorar a formação acadêmica dos estudantes, estimulando o desenvolvimento de habilidades críticas e criativas.
+                  </Text>
+                </View>
+
+                <View style={styles.aboutCard}>
+                  <Text style={styles.aboutCardText}>
+                    O PET Fronteira é um grupo de Programa de Educação Tutorial que atua na integração entre ensino, pesquisa e extensão. Nosso objetivo é proporcionar experiências enriquecedoras aos petianos, desenvolvendo projetos inovadores que impactam positivamente a comunidade acadêmica e a sociedade. Trabalhamos com autonomia, responsabilidade e espírito colaborativo, sempre em sintonia com os princípios da universidade pública.
+                  </Text>
+                </View>
               </View>
             </View>
+
+            {/* --- SEÇÃO: O QUE O PET PROPORCIONA --- */}
+            <View style={[styles.sectionContainer, styles.sectionAltBg]}>
+              <Text style={styles.sectionTitle}>
+                O que o PET proporciona<Text style={styles.orangeHighlight}>?</Text>
+              </Text>
+              <Text style={styles.sectionSubtitle}>
+                Essas são algumas das principais vantagens e experiências que o PET oferece.
+              </Text>
+
+              <View style={styles.featuresGrid}>
+                <View style={styles.featureItem}>
+                  <View style={styles.featureIconContainer}><SearchIcon /></View>
+                  <View style={styles.featureTextContent}>
+                    <Text style={styles.featureTitle}>Projetos de Pesquisa</Text>
+                    <Text style={styles.featureDesc}>Desenvolvimento de estudos científicos em áreas de interesse do grupo.</Text>
+                  </View>
+                </View>
+
+                <View style={styles.featureItem}>
+                  <View style={styles.featureIconContainer}><EaselIcon /></View>
+                  <View style={styles.featureTextContent}>
+                    <Text style={styles.featureTitle}>Eventos Científicos</Text>
+                    <Text style={styles.featureDesc}>Envolvimento em seminários, feiras e encontros de pesquisa.</Text>
+                  </View>
+                </View>
+
+                <View style={styles.featureItem}>
+                  <View style={styles.featureIconContainer}><PeopleIcon /></View>
+                  <View style={styles.featureTextContent}>
+                    <Text style={styles.featureTitle}>Projetos de Extensão</Text>
+                    <Text style={styles.featureDesc}>Ações junto à comunidade para aplicar os conhecimentos adquiridos no curso.</Text>
+                  </View>
+                </View>
+
+                <View style={styles.featureItem}>
+                  <View style={styles.featureIconContainer}><DocumentIcon /></View>
+                  <View style={styles.featureTextContent}>
+                    <Text style={styles.featureTitle}>Projetos de Ensino</Text>
+                    <Text style={styles.featureDesc}>Estratégias inovadoras voltadas ao aprimoramento do processo de ensino-aprendizagem.</Text>
+                  </View>
+                </View>
+
+                <View style={styles.featureItem}>
+                  <View style={styles.featureIconContainer}><ToolsIcon /></View>
+                  <View style={styles.featureTextContent}>
+                    <Text style={styles.featureTitle}>Oficinas</Text>
+                    <Text style={styles.featureDesc}>Atividades práticas e dinâmicas para desenvolvimento de habilidades acadêmicas e profissionais.</Text>
+                  </View>
+                </View>
+
+                <View style={styles.featureItem}>
+                  <View style={styles.featureIconContainer}><MicIcon /></View>
+                  <View style={styles.featureTextContent}>
+                    <Text style={styles.featureTitle}>Palestras</Text>
+                    <Text style={styles.featureDesc}>Eventos com convidados para discutir temas relevantes da área, atualidades e mercado de trabalho.</Text>
+                  </View>
+                </View>
+
+                <View style={styles.featureItem}>
+                  <View style={styles.featureIconContainer}><MonitorIcon /></View>
+                  <View style={styles.featureTextContent}>
+                    <Text style={styles.featureTitle}>Monitorias</Text>
+                    <Text style={styles.featureDesc}>Apoio contínuo em disciplinas, auxiliando colegas com dúvidas e práticas de aprendizado.</Text>
+                  </View>
+                </View>
+
+                <View style={styles.featureItem}>
+                  <View style={styles.featureIconContainer}><DollarIcon /></View>
+                  <View style={styles.featureTextContent}>
+                    <Text style={styles.featureTitle}>Ajuda financeira para bolsistas</Text>
+                    <Text style={styles.featureDesc}>Bolsa auxílio para membros bolsistas.</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+          </ScrollView>
+
+          {/* --- FOOTER FLUTUANTE FIXO (fora do ScrollView) --- */}
+          <View style={styles.footerOverlay} pointerEvents="box-none">
+            <Animated.View
+              pointerEvents={footerVisivel ? 'auto' : 'none'}
+              style={[
+                styles.footer,
+                styles.floatingFooter,
+                {
+                  opacity: footerAnim,
+                  transform: [
+                    {
+                      translateY: footerAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [30, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <View style={styles.footerContent}>
+                <View style={styles.footerSection}>
+                  <Text style={styles.footerTitle}>PET Fronteira</Text>
+                  <Text style={styles.footerText}>UFMS Universidade Federal de Mato Grosso do Sul</Text>
+                  <Text style={styles.footerText}>Campus de Ponta Porã</Text>
+                </View>
+
+                <View style={styles.footerSection}>
+                  <Text style={styles.footerTitle}>Links Rápidos</Text>
+                  <Link href="/sobre" style={styles.footerLink}>Sobre</Link>
+                  <Link href="/projetos" style={styles.footerLink}>Projetos</Link>
+                  <Link href="/contato" style={styles.footerLink}>Contato</Link>
+                </View>
+
+                <View style={styles.footerSection}>
+                  <Text style={styles.footerTitle}>Úteis</Text>
+                  <TouchableOpacity onPress={() => abrirLink('https://prograd.ufms.br/calendario-academico/')}>
+                    <Text style={styles.footerLink}>Calendário Acadêmico</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => abrirLink('https://sigproj.ufms.br/')}>
+                    <Text style={styles.footerLink}>SIGPROJ</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => abrirLink('https://siscad.ufms.br/')}>
+                    <Text style={styles.footerLink}>SISCAD</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => abrirLink('https://ava.ufms.br/')}>
+                    <Text style={styles.footerLink}>AVA</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => abrirLink('https://prograd.ufms.br/programas-e-projetos/programa-de-educacao-tutorial-pet/')}>
+                    <Text style={styles.footerLink}>Pets UFMS</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => abrirLink('https://www.ufms.br/')}>
+                    <Text style={styles.footerLink}>UFMS</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => abrirLink('https://cppp.ufms.br/')}>
+                    <Text style={styles.footerLink}>Campus Ponta Porã</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.footerSection}>
+                  <Text style={styles.footerTitle}>Redes Sociais</Text>
+
+                  <View style={styles.socialLinks}>
+                    {/* Facebook */}
+                    <TouchableOpacity
+                      style={styles.socialIconBtn}
+                      onPress={() => abrirLink('https://www.facebook.com/pet.fronteira/')}
+                    >
+                      <FacebookIconSvg size={22} />
+                    </TouchableOpacity>
+
+                    {/* Instagram */}
+                    <TouchableOpacity
+                      style={styles.socialIconBtn}
+                      onPress={() => abrirLink('https://www.instagram.com/petfronteira/?hl=pt')}
+                    >
+                      <InstagramIconSvg size={22} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.footerBottom}>
+                <Text style={styles.footerBottomText}>
+                  © 2026 PET Fronteira - Todos os direitos reservados
+                </Text>
+              </View>
+            </Animated.View>
+
+            <TouchableOpacity
+              style={styles.footerToggleBtn}
+              onPress={toggleFooter}
+              activeOpacity={0.8}
+            >
+              <ChevronIconSvg expanded={footerVisivel} />
+            </TouchableOpacity>
           </View>
-          
-          <View style={styles.footerBottom}>
-            <Text style={styles.footerBottomText}>
-              © 2026 PET Fronteira - Todos os direitos reservados
-            </Text>
-          </View>
-        </View>
+
+        </SafeAreaView>
       </ThemedView>
     </>
   );
 }
 
-// --- ESTILOS ATUALIZADOS ---
+// --- ESTILOS ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#11121C' },
   safeArea: { flex: 1 },
-  scrollContainer: { flexGrow: 1, paddingBottom: 20 },
+  scrollContainer: { flexGrow: 1 },
   header: { paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#2a2b3d', backgroundColor: '#11121C', zIndex: 10 },
   headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerButtons: { flexDirection: 'row', alignItems: 'center', gap: 15 },
@@ -408,8 +695,6 @@ const styles = StyleSheet.create({
   changePhotoText: { fontSize: 14 },
   userName: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
   userEmail: { color: '#CCCCCC', fontSize: 14, marginBottom: 5 },
-  
-  // Novo estilo do cargo
   userRole: { color: '#F0502D', fontSize: 14, fontWeight: 'bold', backgroundColor: '#2a2b3d', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, overflow: 'hidden' },
 
   userMenuOptions: { gap: 5 },
@@ -429,8 +714,57 @@ const styles = StyleSheet.create({
   welcomeAvatar: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#F0502D' },
   welcomeTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: 'bold', marginBottom: 8 },
   welcomeText: { color: '#CCCCCC', fontSize: 16, textAlign: 'center' },
-  
-  footer: { backgroundColor: '#1c1d2b', borderTopWidth: 3, borderTopColor: '#F0502D', paddingVertical: 20, paddingHorizontal: 15, paddingBottom: 30 },
+
+  sectionContainer: { paddingVertical: 45, paddingHorizontal: 20, alignItems: 'center' },
+  sectionAltBg: { backgroundColor: '#161724', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#2a2b3d' },
+  sectionTitle: { color: '#FFFFFF', fontSize: 26, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
+  orangeHighlight: { color: '#F0502D' },
+  sectionSubtitle: { color: '#AAAAAA', fontSize: 15, textAlign: 'center', marginBottom: 35, paddingHorizontal: 10 },
+
+  aboutCardsContainer: { gap: 18, width: '100%', maxWidth: 900 },
+  aboutCard: { backgroundColor: '#1c1d2b', padding: 22, borderRadius: 12, borderWidth: 1, borderColor: '#2a2b3d' },
+  aboutCardText: { color: '#DDDDDD', fontSize: 14, lineHeight: 22, textAlign: 'justify' },
+
+  featuresGrid: { width: '100%', maxWidth: 900, gap: 16, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
+  featureItem: { flexDirection: 'row', width: '31%', minWidth: 260, alignItems: 'flex-start', gap: 12 },
+  featureIconContainer: { width: 48, height: 48, borderRadius: 10, backgroundColor: 'rgba(240, 80, 45, 0.1)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(240, 80, 45, 0.2)' },
+  featureTextContent: { flex: 1 },
+  featureTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginBottom: 5 },
+  featureDesc: { color: '#AAAAAA', fontSize: 13, lineHeight: 19 },
+
+  // --- FOOTER FLUTUANTE & BOTÃO ---
+  footerOverlay: {
+    position: 'absolute',
+    left: 15,
+    bottom: 20,
+    zIndex: 100,
+    elevation: 10,
+  },
+  footerToggleBtn: {
+    backgroundColor: '#1c1d2b',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+  },
+  floatingFooter: {
+    position: 'absolute',
+    bottom: 56,
+    left: 0,
+    width: 340,
+    maxWidth: 360,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+
+  footer: { backgroundColor: '#1c1d2b', borderTopWidth: 3, borderTopColor: '#F0502D', paddingVertical: 20, paddingHorizontal: 15 },
   footerContent: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 15, marginBottom: 20 },
   footerSection: { flex: 1, minWidth: 140 },
   footerTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginBottom: 10, borderBottomWidth: 2, borderBottomColor: '#F0502D', paddingBottom: 5 },
@@ -438,11 +772,12 @@ const styles = StyleSheet.create({
   footerLink: { color: '#CCCCCC', fontSize: 13, marginBottom: 6, lineHeight: 18 },
   socialLinks: { gap: 6 },
   socialLink: { color: '#F0502D', fontSize: 13, marginBottom: 4 },
+  socialIconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(240, 80, 45, 0.1)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(240, 80, 45, 0.3)' },
   footerBottom: { borderTopWidth: 1, borderTopColor: '#2a2b3d', paddingTop: 15, alignItems: 'center' },
   footerBottomText: { color: '#666', fontSize: 12, textAlign: 'center' },
-  
+
   btnPrimary: { backgroundColor: '#F0502D', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 8, alignItems: 'center' },
-  btnPrimaryText: { color: '#11121C', fontSize: 16, fontWeight: 'bold' },
+  btnPrimaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
   btnSecondary: { backgroundColor: 'transparent', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 8, alignItems: 'center', borderWidth: 2, borderColor: '#F0502D' },
   btnSecondaryText: { color: '#F0502D', fontSize: 16, fontWeight: 'bold' },
 });
