@@ -109,6 +109,18 @@ const InstagramIconSvg = ({ size = 22 }: { size?: number }) => (
     />
   </Svg>
 );
+// --- ÍCONE: TELEFONE ---
+const PhoneIconSvg = ({ size = 16 }: { size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.86.35 1.7.68 2.5a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.58-1.27a2 2 0 0 1 2.11-.45c.8.33 1.64.56 2.5.68A2 2 0 0 1 22 16.92z"
+      stroke="#F0502D"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
 // --- ÍCONES DAS RECURSOS DA SEÇÃO "O QUE O PET PROPORCIONA" ---
 const SearchIcon = () => (
   <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
@@ -183,6 +195,63 @@ const GoogleIconSvg = () => (
   </Svg>
 );
 
+// --- ÍCONES: PROJETOS / NORMAS ---
+const FolderIconSvg = () => (
+  <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const DownloadIconSvg = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 3v12m0 0l-4-4m4 4l4-4" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M4 19h16" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+// --- ÍCONES: FAQ (X quando fechado, Check quando aberto) ---
+const FaqClosedIconSvg = () => (
+  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="11" fill="#161724" />
+    <Path d="M15 9l-6 6M9 9l6 6" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+const FaqOpenIconSvg = () => (
+  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="11" fill="#161724" />
+    <Path d="M7 12.5l3 3 7-7" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+// --- ÍCONES: ESTATÍSTICAS ---
+const StatProjetosIconSvg = () => (
+  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 2l9 5-9 5-9-5 9-5z" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M3 12l9 5 9-5M3 17l9 5 9-5" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const StatConcluidosIconSvg = () => (
+  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="9" stroke="#F0502D" strokeWidth="2" />
+    <Path d="M8 12.5l2.5 2.5L16 9" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const StatEventosIconSvg = () => (
+  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 2c3 4 5 7 5 10a5 5 0 0 1-10 0c0-3 2-6 5-10z" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const StatLivesIconSvg = () => (
+  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <Rect x="4" y="7" width="16" height="12" rx="2" stroke="#F0502D" strokeWidth="2" />
+    <Path d="M4 10h16M9 4v4M15 4v4" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
 // --- TIPO: PERFIL VINDO DO SUPABASE ---
 interface Perfil {
   id: string;
@@ -192,6 +261,70 @@ interface Perfil {
   avatar_url: string | null;
   sobre: string | null;
 }
+
+// --- TIPO: PROJETO (preparado para vir do banco futuramente) ---
+interface Projeto {
+  id: string;
+  nome: string;
+  descricao: string;
+  imagem_url: string | null;
+}
+
+// Array vazio de propósito — quando a tabela "projetos" existir no Supabase,
+// troque isso por uma busca real (igual foi feito com profiles).
+const PROJETOS_ATUAIS: Projeto[] = [];
+
+// --- LINKS: NORMAS E MANUAIS ---
+const LINK_NORMAS = 'https://prograd.ufms.br/files/2021/08/IN_53-Normas-Programa-Educacao-Tutorial-PET.pdf';
+const LINK_MANUAL = 'https://help-pet-site-985f59.gitlab.io/demos/docs/pet_manual_basico-MOB%20(1).pdf';
+
+// --- CONTATO: TELEFONE ---
+const TELEFONE_DISPLAY = '+55 67 3437-1709';
+const TELEFONE_LINK = 'tel:+556734371709';
+
+// --- DADOS: DÚVIDAS FREQUENTES ---
+interface Duvida {
+  pergunta: string;
+  resposta: string;
+}
+
+const DUVIDAS_FREQUENTES: Duvida[] = [
+  {
+    pergunta: 'O que é o PET?',
+    resposta:
+      'O Programa de Educação Tutorial (PET) do Ministério da Educação (MEC) é um programa composto por Grupos PET ligados a Cursos de Graduação, que desenvolvem a indissociabilidade entre Ensino, Pesquisa e Extensão para melhoria da formação dos estudantes de graduação da UFMS. O PET-UFMS tem como finalidade a melhoria dos Cursos de Graduação da UFMS, por meio do incentivo à realização de atividades voltadas para o Ensino, Pesquisa, Inovação e Extensão, de forma integrada, estimulando a formação de profissionais técnicos criativos, críticos e com visão global.',
+  },
+  {
+    pergunta: 'Como me tornar um membro do PET?',
+    resposta: 'A entrada no PET é feita por meio de concurso público (edital), aberto periodicamente pelo grupo.',
+  },
+  {
+    pergunta: 'Como acompanhar a minha bolsa?',
+    resposta: '',
+  },
+  {
+    pergunta: 'Não sou bolsista, posso participar das atividades do PET?',
+    resposta: '',
+  },
+  {
+    pergunta: 'Como ter o apoio do PET para um projeto?',
+    resposta: '',
+  },
+];
+
+// --- DADOS: ESTATÍSTICAS ---
+interface Estatistica {
+  numero: string;
+  label: string;
+  icone: () => React.JSX.Element;
+}
+
+const ESTATISTICAS: Estatistica[] = [
+  { numero: '15+', label: 'PROJETOS EM ANDAMENTO', icone: StatProjetosIconSvg },
+  { numero: '6+', label: 'CONCLUÍDOS', icone: StatConcluidosIconSvg },
+  { numero: '332+', label: 'EVENTOS REALIZADOS', icone: StatEventosIconSvg },
+  { numero: '2213+', label: 'LIVES SAVED', icone: StatLivesIconSvg },
+];
 
 export default function HomeScreen() {
   const [menuAberto, setMenuAberto] = useState(false);
@@ -224,6 +357,13 @@ export default function HomeScreen() {
   const [tutor, setTutor] = useState<Perfil | null>(null);
   const [membros, setMembros] = useState<Perfil[]>([]);
   const [carregandoPerfis, setCarregandoPerfis] = useState(true);
+
+  // --- ESTADO: FAQ (qual pergunta está expandida) ---
+  const [duvidaAberta, setDuvidaAberta] = useState<number | null>(null);
+
+  const toggleDuvida = (index: number) => {
+    setDuvidaAberta(duvidaAberta === index ? null : index);
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -669,6 +809,118 @@ export default function HomeScreen() {
               )}
             </View>
 
+            {/* --- SEÇÃO: PROJETOS ATUAIS EM ANDAMENTO --- */}
+            {/* Preparado para buscar do Supabase (tabela "projetos") quando ela existir. */}
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>
+                Projetos Atuais em Andamento<Text style={styles.orangeHighlight}>.</Text>
+              </Text>
+              <Text style={styles.sectionSubtitle}>Conheça as principais iniciativas do PET em execução.</Text>
+
+              {PROJETOS_ATUAIS.length > 0 ? (
+                <View style={styles.projetosGrid}>
+                  {PROJETOS_ATUAIS.map((projeto) => (
+                    <View key={projeto.id} style={styles.projetoCard}>
+                      {projeto.imagem_url ? (
+                        <Image source={{ uri: projeto.imagem_url }} style={styles.projetoImagem} />
+                      ) : (
+                        <View style={styles.projetoImagemPlaceholder}>
+                          <FolderIconSvg />
+                        </View>
+                      )}
+                      <Text style={styles.projetoNome}>{projeto.nome}</Text>
+                      <Text style={styles.projetoDesc}>{projeto.descricao}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.projetosEmptyState}>
+                  <FolderIconSvg />
+                  <Text style={styles.emptyText}>Em breve, os projetos em andamento aparecerão aqui.</Text>
+                  <Link href="/projetos" asChild>
+                    <TouchableOpacity style={styles.btnSecondary}>
+                      <Text style={styles.btnSecondaryText}>Ver página de Projetos</Text>
+                    </TouchableOpacity>
+                  </Link>
+                </View>
+              )}
+            </View>
+
+            {/* --- SEÇÃO: ESTATÍSTICAS --- */}
+            <View style={[styles.sectionContainer, styles.sectionAltBg, styles.statsSection]}>
+              <View style={styles.statsRow}>
+                {ESTATISTICAS.map((estat, index) => {
+                  const Icone = estat.icone;
+                  return (
+                    <View key={index} style={styles.statItem}>
+                      <View style={styles.statIconCircle}>
+                        <Icone />
+                      </View>
+                      <View>
+                        <Text style={styles.statNumero}>{estat.numero}</Text>
+                        <Text style={styles.statLabel}>{estat.label}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* --- SEÇÃO: NORMAS E MANUAIS --- */}
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>Normas e Manuais</Text>
+              <Text style={styles.sectionSubtitle}>Consulte aqui as normas do Programa de Educação Tutorial (PET)</Text>
+
+              <View style={styles.normasButtonsRow}>
+                <TouchableOpacity
+                  style={styles.normaBtn}
+                  onPress={() => abrirLink(LINK_NORMAS)}
+                >
+                  <DownloadIconSvg />
+                  <Text style={styles.normaBtnText}>Baixar PDF das NORMAS</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.normaBtn}
+                  onPress={() => abrirLink(LINK_MANUAL)}
+                >
+                  <DownloadIconSvg />
+                  <Text style={styles.normaBtnText}>Baixar MANUAL do Pet</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* --- SEÇÃO: DÚVIDAS FREQUENTES --- */}
+            <View style={[styles.sectionContainer, styles.sectionAltBg]}>
+              <Text style={styles.sectionTitle}>
+                Dúvidas Frequentes<Text style={styles.orangeHighlight}>.</Text>
+              </Text>
+
+              <View style={styles.faqColumnFull}>
+                {DUVIDAS_FREQUENTES.map((duvida, index) => {
+                  const aberta = duvidaAberta === index;
+                  return (
+                    <View key={index} style={styles.faqItem}>
+                      <TouchableOpacity
+                        style={styles.faqQuestionRow}
+                        onPress={() => toggleDuvida(index)}
+                        activeOpacity={0.7}
+                      >
+                        {aberta ? <FaqOpenIconSvg /> : <FaqClosedIconSvg />}
+                        <Text style={styles.faqQuestionText}>{duvida.pergunta}</Text>
+                      </TouchableOpacity>
+
+                      {aberta && (
+                        <Text style={styles.faqAnswerText}>
+                          {duvida.resposta ? duvida.resposta : 'Em breve mais informações sobre este tópico.'}
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+
           </ScrollView>
 
           {/* --- FOOTER FLUTUANTE FIXO (fora do ScrollView) --- */}
@@ -696,6 +948,8 @@ export default function HomeScreen() {
                   <Text style={styles.footerTitle}>PET Fronteira</Text>
                   <Text style={styles.footerText}>UFMS Universidade Federal de Mato Grosso do Sul</Text>
                   <Text style={styles.footerText}>Campus de Ponta Porã</Text>
+
+                  
                 </View>
 
                 <View style={styles.footerSection}>
@@ -741,6 +995,7 @@ export default function HomeScreen() {
                     >
                       <FacebookIconSvg size={22} />
                     </TouchableOpacity>
+                    
 
                     {/* Instagram */}
                     <TouchableOpacity
@@ -749,6 +1004,10 @@ export default function HomeScreen() {
                     >
                       <InstagramIconSvg size={22} />
                     </TouchableOpacity>
+                    <TouchableOpacity style={styles.footerPhoneRow} onPress={() => abrirLink(TELEFONE_LINK)}>
+                    <PhoneIconSvg size={14} />
+                    <Text style={styles.footerPhoneText}>{TELEFONE_DISPLAY}</Text>
+                  </TouchableOpacity>
                   </View>
                 </View>
               </View>
@@ -838,7 +1097,7 @@ const styles = StyleSheet.create({
   sectionTitle: { color: '#FFFFFF', fontSize: 26, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
   orangeHighlight: { color: '#F0502D' },
   sectionSubtitle: { color: '#AAAAAA', fontSize: 15, textAlign: 'center', marginBottom: 35, paddingHorizontal: 10 },
-  emptyText: { color: '#666', fontSize: 14 },
+  emptyText: { color: '#666', fontSize: 14, textAlign: 'center' },
 
   aboutCardsContainer: { gap: 18, width: '100%', maxWidth: 900 },
   aboutCard: { backgroundColor: '#1c1d2b', padding: 22, borderRadius: 12, borderWidth: 1, borderColor: '#2a2b3d' },
@@ -916,6 +1175,92 @@ const styles = StyleSheet.create({
   membroNome: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginTop: 10, marginBottom: 4 },
   membroCurso: { color: '#AAAAAA', fontSize: 12, textAlign: 'center' },
 
+  // --- PROJETOS ATUAIS ---
+  projetosGrid: {
+    width: '100%',
+    maxWidth: 900,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 18,
+  },
+  projetoCard: {
+    width: 220,
+    backgroundColor: '#1c1d2b',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    overflow: 'hidden',
+    paddingBottom: 16,
+  },
+  projetoImagem: { width: '100%', height: 130 },
+  projetoImagemPlaceholder: {
+    width: '100%',
+    height: 130,
+    backgroundColor: '#2a2b3d',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  projetoNome: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold', marginTop: 12, marginBottom: 4, paddingHorizontal: 14 },
+  projetoDesc: { color: '#AAAAAA', fontSize: 12, lineHeight: 18, paddingHorizontal: 14 },
+  projetosEmptyState: {
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: '#1c1d2b',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    borderStyle: 'dashed',
+    padding: 30,
+    width: '100%',
+    maxWidth: 500,
+  },
+
+  // --- ESTATÍSTICAS ---
+  statsSection: { paddingVertical: 35 },
+  statsRow: {
+    width: '100%',
+    maxWidth: 950,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 30,
+  },
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 160 },
+  statIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#1c1d2b',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+  },
+  statNumero: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold' },
+  statLabel: { color: '#F0502D', fontSize: 11, fontWeight: '600', letterSpacing: 0.5 },
+
+  // --- NORMAS E MANUAIS ---
+  normasButtonsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, justifyContent: 'center' },
+  normaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#1c6fa8',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    justifyContent: 'center',
+  },
+  normaBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
+
+  // --- FAQ ---
+  faqColumnFull: { width: '100%', maxWidth: 700 },
+  faqItem: { borderBottomWidth: 1, borderBottomColor: '#2a2b3d', paddingVertical: 14 },
+  faqQuestionRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  faqQuestionText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600', flex: 1 },
+  faqAnswerText: { color: '#AAAAAA', fontSize: 13, lineHeight: 21, marginTop: 12, marginLeft: 34 },
+
   // --- FOOTER FLUTUANTE & BOTÃO ---
   footerOverlay: {
     position: 'absolute',
@@ -954,6 +1299,8 @@ const styles = StyleSheet.create({
   footerTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginBottom: 10, borderBottomWidth: 2, borderBottomColor: '#F0502D', paddingBottom: 5 },
   footerText: { color: '#CCCCCC', fontSize: 13, marginBottom: 5, lineHeight: 18 },
   footerLink: { color: '#CCCCCC', fontSize: 13, marginBottom: 6, lineHeight: 18 },
+  footerPhoneRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  footerPhoneText: { color: '#F0502D', fontSize: 13, fontWeight: 'bold' },
   socialLinks: { gap: 6 },
   socialLink: { color: '#F0502D', fontSize: 13, marginBottom: 4 },
   socialIconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(240, 80, 45, 0.1)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(240, 80, 45, 0.3)' },
