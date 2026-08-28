@@ -34,6 +34,7 @@ export default function EditarPerfilScreen() {
   
   const [nomeReal, setNomeReal] = useState('');
   const [nomePersonalizado, setNomePersonalizado] = useState('');
+  const [sobre, setSobre] = useState('');
   
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [novaImagemLocal, setNovaImagemLocal] = useState<string | null>(null);
@@ -47,6 +48,17 @@ export default function EditarPerfilScreen() {
         setNomeReal(metadata?.full_name || '');
         setNomePersonalizado(metadata?.custom_name || '');
         setAvatarUrl(metadata?.avatar_url || null);
+
+        // Busca o "sobre" salvo na tabela profiles
+        const { data: perfil, error: erroPerfil } = await supabase
+          .from('profiles')
+          .select('sobre')
+          .eq('id', data.user.id)
+          .single();
+
+        if (!erroPerfil && perfil) {
+          setSobre(perfil.sobre || '');
+        }
       } else {
         Alert.alert('Erro', 'Usuário não encontrado. Faça login novamente.');
         router.replace('/login');
@@ -117,6 +129,7 @@ export default function EditarPerfilScreen() {
         urlFinalDaImagem = urlData.publicUrl;
       }
 
+      // 1. Atualiza o auth (usado no header, menu, etc.)
       const { error: erroUpdate } = await supabase.auth.updateUser({
         data: {
           full_name: nomeReal,
@@ -126,6 +139,20 @@ export default function EditarPerfilScreen() {
       });
 
       if (erroUpdate) throw erroUpdate;
+
+      // 2. Atualiza a tabela profiles (usada na Home para Tutor/Membros)
+      const { error: erroProfile } = await supabase
+        .from('profiles')
+        .update({
+          nome: nomeReal,
+          avatar_url: urlFinalDaImagem,
+          sobre: sobre,
+        })
+        .eq('id', user.id);
+
+      if (erroProfile) {
+        console.error('Erro ao atualizar profile:', erroProfile);
+      }
 
       if (Platform.OS === 'web') {
         window.alert('Perfil atualizado com sucesso!');
@@ -230,6 +257,22 @@ export default function EditarPerfilScreen() {
                   />
                 </View>
 
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Sobre</Text>
+                  <Text style={styles.inputHint}>Uma breve descrição sobre você (aparece publicamente caso você seja o Tutor)</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder="Conte um pouco sobre sua área de atuação, experiência..."
+                    placeholderTextColor="#666"
+                    value={sobre}
+                    onChangeText={setSobre}
+                    editable={!loading}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                  />
+                </View>
+
                 <TouchableOpacity 
                   style={[styles.saveButton, loading && styles.saveButtonDisabled]}
                   onPress={handleSalvar}
@@ -316,6 +359,7 @@ const styles = StyleSheet.create({
   label: { color: '#CCCCCC', fontSize: 15, fontWeight: '600', marginBottom: 4 },
   inputHint: { color: '#666', fontSize: 12, marginBottom: 8 },
   input: { backgroundColor: '#1c1d2b', borderRadius: 8, padding: 16, color: '#FFFFFF', fontSize: 16, borderWidth: 1, borderColor: '#2a2b3d' },
+  textArea: { minHeight: 100, paddingTop: 16 },
   saveButton: { backgroundColor: '#F0502D', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginTop: 10 },
   saveButtonDisabled: { opacity: 0.7 },
   saveButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },

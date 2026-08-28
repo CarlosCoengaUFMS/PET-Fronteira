@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as Device from 'expo-device';
-import { Platform, StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Modal, Alert, Animated, Easing, Linking } from 'react-native';
+import { Platform, StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Modal, Alert, Animated, Easing, Linking, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, Stack, router } from 'expo-router';
 import Svg, { Path, Rect, Circle } from 'react-native-svg';
@@ -166,6 +166,33 @@ const DollarIcon = () => (
   </Svg>
 );
 
+// --- ÍCONES: TUTOR ---
+const LinkIconSvg = () => (
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+    <Path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07l-1.5 1.5" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M14 11a5 5 0 0 0-7.07 0l-2.83 2.83a5 5 0 0 0 7.07 7.07l1.5-1.5" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const GoogleIconSvg = () => (
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M21.35 11.1h-9.17v2.98h5.4c-.23 1.42-1.65 4.16-5.4 4.16-3.25 0-5.9-2.69-5.9-6s2.65-6 5.9-6c1.85 0 3.09.79 3.8 1.47l2.59-2.5C16.96 3.35 14.7 2.4 12.18 2.4 6.98 2.4 2.78 6.6 2.78 12s4.2 9.6 9.4 9.6c5.43 0 9.02-3.82 9.02-9.2 0-.62-.07-1.09-.15-1.3z"
+      fill="#FFFFFF"
+    />
+  </Svg>
+);
+
+// --- TIPO: PERFIL VINDO DO SUPABASE ---
+interface Perfil {
+  id: string;
+  nome: string;
+  email: string;
+  cargo: string;
+  avatar_url: string | null;
+  sobre: string | null;
+}
+
 export default function HomeScreen() {
   const [menuAberto, setMenuAberto] = useState(false);
   const [userMenuAberto, setUserMenuAberto] = useState(false);
@@ -193,6 +220,11 @@ export default function HomeScreen() {
     avatar: null
   });
 
+  // --- ESTADO: TUTOR E MEMBROS (vindos do Supabase) ---
+  const [tutor, setTutor] = useState<Perfil | null>(null);
+  const [membros, setMembros] = useState<Perfil[]>([]);
+  const [carregandoPerfis, setCarregandoPerfis] = useState(true);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       atualizarDadosDoUsuario(session);
@@ -202,8 +234,24 @@ export default function HomeScreen() {
       atualizarDadosDoUsuario(session);
     });
 
+    buscarPerfis();
+
     return () => subscription.unsubscribe();
   }, []);
+
+  const buscarPerfis = async () => {
+    setCarregandoPerfis(true);
+    const { data, error } = await supabase.from('profiles').select('*');
+
+    if (!error && data) {
+      const perfis = data as Perfil[];
+      setTutor(perfis.find((p) => p.cargo === 'Petiano Admin') || null);
+      setMembros(perfis.filter((p) => p.cargo !== 'Petiano Admin'));
+    } else if (error) {
+      console.error('Erro ao buscar perfis:', error);
+    }
+    setCarregandoPerfis(false);
+  };
 
   const atualizarDadosDoUsuario = (session: any) => {
     if (session?.user) {
@@ -551,6 +599,76 @@ export default function HomeScreen() {
               </View>
             </View>
 
+            {/* --- SEÇÃO: TUTOR --- */}
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>
+                Tutor<Text style={styles.orangeHighlight}>.</Text>
+              </Text>
+              <Text style={styles.sectionSubtitle}>Conheça nosso professor tutor atual</Text>
+
+              {carregandoPerfis ? (
+                <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 20 }} />
+              ) : tutor ? (
+                <View style={styles.tutorCard}>
+                  <View style={styles.tutorAvatarContainer}>
+                    {tutor.avatar_url ? (
+                      <Image source={{ uri: tutor.avatar_url }} style={styles.tutorAvatarImage} />
+                    ) : (
+                      <UserIconSvg size={70} />
+                    )}
+                  </View>
+
+                  <View style={styles.tutorInfo}>
+                    <Text style={styles.tutorName}>{tutor.nome}</Text>
+                    <Text style={styles.tutorRole}>{tutor.cargo}</Text>
+
+                    {tutor.sobre ? (
+                      <Text style={styles.tutorDesc}>{tutor.sobre}</Text>
+                    ) : null}
+
+                    <View style={styles.tutorSocialRow}>
+                      <TouchableOpacity style={styles.tutorSocialBtn}>
+                        <LinkIconSvg />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.tutorSocialBtn}>
+                        <GoogleIconSvg />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                <Text style={styles.emptyText}>Nenhum tutor cadastrado ainda.</Text>
+              )}
+            </View>
+
+            {/* --- SEÇÃO: MEMBROS --- */}
+            <View style={[styles.sectionContainer, styles.sectionAltBg]}>
+              <Text style={styles.sectionTitle}>
+                Membros<Text style={styles.orangeHighlight}>.</Text>
+              </Text>
+              <Text style={styles.sectionSubtitle}>Conheça nossos petianos</Text>
+
+              {carregandoPerfis ? (
+                <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 20 }} />
+              ) : membros.length > 0 ? (
+                <View style={styles.membrosGrid}>
+                  {membros.map((membro) => (
+                    <View key={membro.id} style={styles.membroCard}>
+                      {membro.avatar_url ? (
+                        <Image source={{ uri: membro.avatar_url }} style={styles.membroAvatarImage} />
+                      ) : (
+                        <UserIconSvg size={56} />
+                      )}
+                      <Text style={styles.membroNome}>{membro.nome}</Text>
+                      <Text style={styles.membroCurso}>{membro.cargo}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.emptyText}>Nenhum membro cadastrado ainda.</Text>
+              )}
+            </View>
+
           </ScrollView>
 
           {/* --- FOOTER FLUTUANTE FIXO (fora do ScrollView) --- */}
@@ -720,6 +838,7 @@ const styles = StyleSheet.create({
   sectionTitle: { color: '#FFFFFF', fontSize: 26, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
   orangeHighlight: { color: '#F0502D' },
   sectionSubtitle: { color: '#AAAAAA', fontSize: 15, textAlign: 'center', marginBottom: 35, paddingHorizontal: 10 },
+  emptyText: { color: '#666', fontSize: 14 },
 
   aboutCardsContainer: { gap: 18, width: '100%', maxWidth: 900 },
   aboutCard: { backgroundColor: '#1c1d2b', padding: 22, borderRadius: 12, borderWidth: 1, borderColor: '#2a2b3d' },
@@ -731,6 +850,71 @@ const styles = StyleSheet.create({
   featureTextContent: { flex: 1 },
   featureTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginBottom: 5 },
   featureDesc: { color: '#AAAAAA', fontSize: 13, lineHeight: 19 },
+
+  // --- TUTOR ---
+  tutorCard: {
+    flexDirection: 'row',
+    backgroundColor: '#1c1d2b',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    padding: 24,
+    gap: 20,
+    width: '100%',
+    maxWidth: 750,
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+  },
+  tutorAvatarContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#2a2b3d',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#F0502D',
+    overflow: 'hidden',
+  },
+  tutorAvatarImage: { width: 100, height: 100, borderRadius: 50 },
+  tutorInfo: { flex: 1, minWidth: 220 },
+  tutorName: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
+  tutorRole: { color: '#F0502D', fontSize: 13, fontWeight: 'bold', marginBottom: 10 },
+  tutorDesc: { color: '#AAAAAA', fontSize: 13, lineHeight: 20, marginBottom: 14 },
+  tutorSocialRow: { flexDirection: 'row', gap: 10 },
+  tutorSocialBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#2a2b3d',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(240, 80, 45, 0.3)',
+  },
+
+  // --- MEMBROS ---
+  membrosGrid: {
+    width: '100%',
+    maxWidth: 900,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 18,
+  },
+  membroCard: {
+    width: 140,
+    alignItems: 'center',
+    backgroundColor: '#1c1d2b',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    paddingVertical: 20,
+    paddingHorizontal: 10,
+  },
+  membroAvatarImage: { width: 56, height: 56, borderRadius: 28 },
+  membroNome: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginTop: 10, marginBottom: 4 },
+  membroCurso: { color: '#AAAAAA', fontSize: 12, textAlign: 'center' },
 
   // --- FOOTER FLUTUANTE & BOTÃO ---
   footerOverlay: {

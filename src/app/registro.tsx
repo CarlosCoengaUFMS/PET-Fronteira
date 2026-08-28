@@ -95,6 +95,20 @@ export default function RegistroScreen() {
         return;
       }
 
+      // NOVO: cria o registro público em "profiles" para aparecer na lista de membros
+      if (data.user) {
+        const { error: profileError } = await supabase.from('profiles').insert({
+          id: data.user.id,
+          nome: form.nome,
+          email: form.email,
+          cargo: form.cargo,
+        });
+
+        if (profileError) {
+          console.error("Erro ao criar profile:", profileError);
+        }
+      }
+
       // Correção para funcionar perfeitamente na Web e no Celular
       if (Platform.OS === 'web') {
         window.alert('Conta criada com sucesso! Redirecionando para o login...');
