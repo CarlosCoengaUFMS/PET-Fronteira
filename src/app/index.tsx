@@ -73,6 +73,14 @@ const ChevronIconSvg = ({ expanded }: { expanded: boolean }) => (
   </Svg>
 );
 
+// --- ÍCONE: CALENDÁRIO (botão de Eventos no header) ---
+const CalendarIconSvg = ({ size = 24 }: { size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="3" y="5" width="18" height="16" rx="2" stroke="#FFFFFF" strokeWidth="2" />
+    <Path d="M3 9h18M8 3v4M16 3v4" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
 // --- ÍCONE: FACEBOOK (Redes Sociais) ---
 const FacebookIconSvg = ({ size = 20 }: { size?: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -466,6 +474,12 @@ export default function HomeScreen() {
               </View>
 
               <View style={styles.headerButtons}>
+                <Link href="/eventos" asChild>
+                  <TouchableOpacity style={styles.eventosBtn}>
+                    <CalendarIconSvg size={22} />
+                  </TouchableOpacity>
+                </Link>
+
                 <TouchableOpacity
                   onPress={handleUserIconPress}
                   style={styles.userButton}
@@ -504,6 +518,7 @@ export default function HomeScreen() {
                   <Link href="/" style={styles.navLink} onPress={() => setMenuAberto(false)}>Início</Link>
                   <Link href="/sobre" style={styles.navLink} onPress={() => setMenuAberto(false)}>Sobre</Link>
                   <Link href="/projetos" style={styles.navLink} onPress={() => setMenuAberto(false)}>Projetos</Link>
+                  <Link href="/eventos" style={styles.navLink} onPress={() => setMenuAberto(false)}>Eventos</Link>
                   <Link href="/contato" style={styles.navLink} onPress={() => setMenuAberto(false)}>Contato</Link>
 
                   <View style={styles.menuSeparator} />
@@ -956,6 +971,7 @@ export default function HomeScreen() {
                   <Text style={styles.footerTitle}>Links Rápidos</Text>
                   <Link href="/sobre" style={styles.footerLink}>Sobre</Link>
                   <Link href="/projetos" style={styles.footerLink}>Projetos</Link>
+                  <Link href="/eventos" style={styles.footerLink}>Eventos</Link>
                   <Link href="/contato" style={styles.footerLink}>Contato</Link>
                 </View>
 
@@ -1046,6 +1062,7 @@ const styles = StyleSheet.create({
   logoImage: { width: 45, height: 45, borderRadius: 10 },
   logoTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
   logoSubtitle: { color: '#CCCCCC', fontSize: 12 },
+  eventosBtn: { padding: 5 },
   userButton: { padding: 5, position: 'relative' },
   userIconContainer: { position: 'relative' },
   loginDot: { position: 'absolute', top: -2, right: -2, width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF4444', borderWidth: 2, borderColor: '#11121C' },
