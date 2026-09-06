@@ -260,8 +260,8 @@ const StatLivesIconSvg = () => (
   </Svg>
 );
 
-// --- TIPO: PERFIL VINDO DO SUPABASE ---
-interface Perfil {
+// --- TIPO: PETIANO VINDO DO SUPABASE ---
+interface Petiano {
   id: string;
   nome: string;
   email: string;
@@ -278,8 +278,8 @@ interface Projeto {
   imagem_url: string | null;
 }
 
-// Array vazio de propósito — quando a tabela "projetos" existir no Supabase,
-// troque isso por uma busca real (igual foi feito com profiles).
+// Array vazio de propósito — quando a tabela "projeto" estiver com dados,
+// troque isso por uma busca real (igual foi feito com petianos).
 const PROJETOS_ATUAIS: Projeto[] = [];
 
 // --- LINKS: NORMAS E MANUAIS ---
@@ -362,8 +362,8 @@ export default function HomeScreen() {
   });
 
   // --- ESTADO: TUTOR E MEMBROS (vindos do Supabase) ---
-  const [tutor, setTutor] = useState<Perfil | null>(null);
-  const [membros, setMembros] = useState<Perfil[]>([]);
+  const [tutor, setTutor] = useState<Petiano | null>(null);
+  const [membros, setMembros] = useState<Petiano[]>([]);
   const [carregandoPerfis, setCarregandoPerfis] = useState(true);
 
   // --- ESTADO: FAQ (qual pergunta está expandida) ---
@@ -382,21 +382,21 @@ export default function HomeScreen() {
       atualizarDadosDoUsuario(session);
     });
 
-    buscarPerfis();
+    buscarPetianos();
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const buscarPerfis = async () => {
+  const buscarPetianos = async () => {
     setCarregandoPerfis(true);
-    const { data, error } = await supabase.from('profiles').select('*');
+    const { data, error } = await supabase.from('petianos').select('*');
 
     if (!error && data) {
-      const perfis = data as Perfil[];
-      setTutor(perfis.find((p) => p.cargo === 'Petiano Admin') || null);
-      setMembros(perfis.filter((p) => p.cargo !== 'Petiano Admin'));
+      const petianos = data as Petiano[];
+      setTutor(petianos.find((p) => p.cargo === 'Tutor') || null);
+      setMembros(petianos.filter((p) => p.cargo !== 'Tutor'));
     } else if (error) {
-      console.error('Erro ao buscar perfis:', error);
+      console.error('Erro ao buscar petianos:', error);
     }
     setCarregandoPerfis(false);
   };
@@ -618,15 +618,23 @@ export default function HomeScreen() {
               <Text style={styles.heroSubtitle}>Unindo forças pela educação, cultura e desenvolvimento da região de fronteira</Text>
 
               {isLoggedIn ? (
-                <View style={styles.heroButtons}>
-                  <Link href="/projetos" asChild>
-                    <TouchableOpacity style={styles.btnPrimary}>
-                      <Text style={styles.btnPrimaryText}>Ver Projetos</Text>
-                    </TouchableOpacity>
-                  </Link>
-                  <Link href="/meus-projetos" asChild>
+                <View style={styles.heroButtonsWrapper}>
+                  <View style={styles.heroButtons}>
+                    <Link href="/projetos" asChild>
+                      <TouchableOpacity style={styles.btnPrimary}>
+                        <Text style={styles.btnPrimaryText}>Ver Projetos</Text>
+                      </TouchableOpacity>
+                    </Link>
+                    <Link href="/meus-projetos" asChild>
+                      <TouchableOpacity style={styles.btnSecondary}>
+                        <Text style={styles.btnSecondaryText}>Meus Projetos</Text>
+                      </TouchableOpacity>
+                    </Link>
+                  </View>
+
+                  <Link href="/relatorios" asChild>
                     <TouchableOpacity style={styles.btnSecondary}>
-                      <Text style={styles.btnSecondaryText}>Meus Projetos</Text>
+                      <Text style={styles.btnSecondaryText}>Relatórios</Text>
                     </TouchableOpacity>
                   </Link>
                 </View>
@@ -825,7 +833,7 @@ export default function HomeScreen() {
             </View>
 
             {/* --- SEÇÃO: PROJETOS ATUAIS EM ANDAMENTO --- */}
-            {/* Preparado para buscar do Supabase (tabela "projetos") quando ela existir. */}
+            {/* Preparado para buscar do Supabase (tabela "projeto") quando ela tiver dados. */}
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>
                 Projetos Atuais em Andamento<Text style={styles.orangeHighlight}>.</Text>
@@ -1101,6 +1109,7 @@ const styles = StyleSheet.create({
   hero: { backgroundColor: '#2a2b3d', padding: 40, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 4, borderBottomColor: '#F0502D' },
   heroTitle: { color: '#FFFFFF', fontSize: 28, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
   heroSubtitle: { color: '#DDDDDD', fontSize: 16, textAlign: 'center', marginBottom: 25 },
+  heroButtonsWrapper: { alignItems: 'center', gap: 15 },
   heroButtons: { flexDirection: 'row', gap: 15, flexWrap: 'wrap', justifyContent: 'center' },
 
   welcomeSection: { padding: 25, alignItems: 'center' },

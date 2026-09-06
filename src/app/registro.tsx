@@ -1,27 +1,27 @@
-import React, { useState } from 'react';
+import { ThemedView } from '@/components/themed-view';
+import { Link, Stack, router } from 'expo-router';
+import { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Link, Stack, router } from 'expo-router';
-import { ThemedView } from '@/components/themed-view';
 
 // 1. Importando o Supabase
 import { supabase } from '../utils/supabase';
 
 // Lista de cargos disponíveis
 const CARGOS_DISPONIVEIS = [
-  'Petiano Admin',
+  'Tutor',
   'Petiano Bolsista',
   'Petiano',
   'Petiano auxiliar'
@@ -95,17 +95,17 @@ export default function RegistroScreen() {
         return;
       }
 
-      // NOVO: cria o registro público em "profiles" para aparecer na lista de membros
+      // Cria o registro público em "petianos" para aparecer na Home (Tutor/Membros)
       if (data.user) {
-        const { error: profileError } = await supabase.from('profiles').insert({
+        const { error: petianoError } = await supabase.from('petianos').insert({
           id: data.user.id,
           nome: form.nome,
           email: form.email,
           cargo: form.cargo,
         });
 
-        if (profileError) {
-          console.error("Erro ao criar profile:", profileError);
+        if (petianoError) {
+          console.error("Erro ao criar petiano:", petianoError);
         }
       }
 
@@ -180,7 +180,7 @@ export default function RegistroScreen() {
                   />
                 </View>
 
-                {/* NOVO: Seleção de Cargo */}
+                {/* Seleção de Cargo */}
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Cargo / Tipo de Conta</Text>
                   <View style={styles.cargosContainer}>
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF', fontSize: 16, borderWidth: 1, borderColor: '#2a2b3d',
   },
   
-  // NOVOS ESTILOS PARA OS CARGOS
+  // ESTILOS PARA OS CARGOS
   cargosContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',

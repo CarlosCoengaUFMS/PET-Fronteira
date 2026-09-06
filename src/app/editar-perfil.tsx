@@ -49,15 +49,15 @@ export default function EditarPerfilScreen() {
         setNomePersonalizado(metadata?.custom_name || '');
         setAvatarUrl(metadata?.avatar_url || null);
 
-        // Busca o "sobre" salvo na tabela profiles
-        const { data: perfil, error: erroPerfil } = await supabase
-          .from('profiles')
+        // Busca o "sobre" salvo na tabela petianos
+        const { data: petiano, error: erroPetiano } = await supabase
+          .from('petianos')
           .select('sobre')
           .eq('id', data.user.id)
           .single();
 
-        if (!erroPerfil && perfil) {
-          setSobre(perfil.sobre || '');
+        if (!erroPetiano && petiano) {
+          setSobre(petiano.sobre || '');
         }
       } else {
         Alert.alert('Erro', 'Usuário não encontrado. Faça login novamente.');
@@ -140,9 +140,9 @@ export default function EditarPerfilScreen() {
 
       if (erroUpdate) throw erroUpdate;
 
-      // 2. Atualiza a tabela profiles (usada na Home para Tutor/Membros)
-      const { error: erroProfile } = await supabase
-        .from('profiles')
+      // 2. Atualiza a tabela petianos (usada na Home para Tutor/Membros)
+      const { error: erroPetiano } = await supabase
+        .from('petianos')
         .update({
           nome: nomeReal,
           avatar_url: urlFinalDaImagem,
@@ -150,8 +150,8 @@ export default function EditarPerfilScreen() {
         })
         .eq('id', user.id);
 
-      if (erroProfile) {
-        console.error('Erro ao atualizar profile:', erroProfile);
+      if (erroPetiano) {
+        console.error('Erro ao atualizar petiano:', erroPetiano);
       }
 
       if (Platform.OS === 'web') {
