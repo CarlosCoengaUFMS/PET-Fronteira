@@ -55,6 +55,13 @@ const LockIconSvg = () => (
   </Svg>
 );
 
+const TrashIconSvg = () => (
+  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 6h18" stroke="#FF4444" strokeWidth="2" strokeLinecap="round" />
+    <Path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="#FF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 // --- TIPOS ---
 interface Petiano {
   id: string;
@@ -81,6 +88,18 @@ const formatarDataHora = (iso: string) => {
     minute: '2-digit',
   });
 };
+
+// Extrai o caminho do arquivo dentro do bucket a partir da URL pública,
+// necessário pra conseguir excluir o arquivo do Storage também.
+const extrairCaminhoStorage = (url: string) => {
+  const marcador = '/relatorios/';
+  const indice = url.indexOf(marcador);
+  if (indice === -1) return null;
+  return url.substring(indice + marcador.length);
+};
+
+// Grupos de cargo exibidos como seções separadas na lista
+const GRUPOS_CARGO = ['Petiano Bolsista', 'Petiano', 'Petiano auxiliar'];
 
 export default function RelatoriosScreen() {
   const [carregandoSessao, setCarregandoSessao] = useState(true);
@@ -130,11 +149,12 @@ export default function RelatoriosScreen() {
     setPetianoSelecionado(petiano);
     setCarregandoRelatorios(true);
 
+    // Mais antigo primeiro, mais recente por último (ascending)
     const { data, error } = await supabase
       .from('relatorios')
       .select('*')
       .eq('petiano_id', petiano.id)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: true });
 
     if (!error && data) {
       setRelatorios(data as Relatorio[]);
@@ -149,17 +169,38 @@ export default function RelatoriosScreen() {
     setRelatorios([]);
   };
 
+  // Evita o erro "GO_BACK was not handled" quando a tela é aberta
+  // sem nenhuma tela anterior na pilha de navegação.
+  const voltar = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
+  };
+
   const enviarRelatorio = async () => {
     if (!usuarioId) return;
 
     const resultado = await DocumentPicker.getDocumentAsync({
-      type: '*/*',
+      type: 'application/pdf',
       copyToCacheDirectory: true,
     });
 
     if (resultado.canceled) return;
 
     const arquivo = resultado.assets[0];
+
+    // Checagem extra, já que em alguns navegadores o filtro de tipo pode não ser respeitado
+    const ehPdf =
+      arquivo.mimeType === 'application/pdf' ||
+      arquivo.name.toLowerCase().endsWith('.pdf');
+
+    if (!ehPdf) {
+      Alert.alert('Arquivo inválido', 'Só é permitido enviar arquivos em PDF.');
+      return;
+    }
+
     setEnviando(true);
 
     try {
@@ -171,7 +212,7 @@ export default function RelatoriosScreen() {
       const { error: erroUpload } = await supabase.storage
         .from('relatorios')
         .upload(caminhoArquivo, blob, {
-          contentType: arquivo.mimeType || 'application/octet-stream',
+          contentType: 'application/pdf',
         });
 
       if (erroUpload) {
@@ -205,6 +246,43 @@ export default function RelatoriosScreen() {
     }
   };
 
+  const confirmarExclusao = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (Platform.OS === 'web') {
+        resolve(window.confirm('Tem certeza que deseja excluir este relatório?'));
+      } else {
+        Alert.alert(
+          'Excluir relatório',
+          'Tem certeza que deseja excluir este relatório?',
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Excluir', style: 'destructive', onPress: () => resolve(true) },
+          ]
+        );
+      }
+    });
+  };
+
+  const excluirRelatorio = async (relatorio: Relatorio) => {
+    const confirmado = await confirmarExclusao();
+    if (!confirmado) return;
+
+    try {
+      const caminho = extrairCaminhoStorage(relatorio.arquivo_url);
+      if (caminho) {
+        await supabase.storage.from('relatorios').remove([caminho]);
+      }
+
+      const { error } = await supabase.from('relatorios').delete().eq('uuid', relatorio.uuid);
+      if (error) throw error;
+
+      setRelatorios((atual) => atual.filter((r) => r.uuid !== relatorio.uuid));
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert('Erro', 'Não foi possível excluir o relatório.');
+    }
+  };
+
   const abrirArquivo = (url: string) => {
     Linking.openURL(url).catch(() => {
       Alert.alert('Erro', 'Não foi possível abrir o arquivo.');
@@ -224,7 +302,7 @@ export default function RelatoriosScreen() {
       <ThemedView style={styles.container}>
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <TouchableOpacity onPress={voltar} style={styles.backButton}>
               <BackIconSvg />
               <Text style={styles.backButtonText}>Voltar</Text>
             </TouchableOpacity>
@@ -251,7 +329,7 @@ export default function RelatoriosScreen() {
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.header}>
             <TouchableOpacity
-              onPress={petianoSelecionado ? voltarParaLista : () => router.back()}
+              onPress={petianoSelecionado ? voltarParaLista : voltar}
               style={styles.backButton}
             >
               <BackIconSvg />
@@ -275,23 +353,32 @@ export default function RelatoriosScreen() {
                 {carregandoPetianos ? (
                   <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 30 }} />
                 ) : petianos.length > 0 ? (
-                  <View style={styles.petianosGrid}>
-                    {petianos.map((petiano) => (
-                      <TouchableOpacity
-                        key={petiano.id}
-                        style={styles.petianoCard}
-                        onPress={() => abrirPetiano(petiano)}
-                      >
-                        {petiano.avatar_url ? (
-                          <Image source={{ uri: petiano.avatar_url }} style={styles.petianoAvatar} />
-                        ) : (
-                          <UserIconSvg size={56} />
-                        )}
-                        <Text style={styles.petianoNome}>{petiano.nome}</Text>
-                        <Text style={styles.petianoCargo}>{petiano.cargo}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                  GRUPOS_CARGO.map((cargo) => {
+                    const doGrupo = petianos.filter((p) => p.cargo === cargo);
+                    if (doGrupo.length === 0) return null;
+
+                    return (
+                      <View key={cargo} style={styles.grupoSection}>
+                        <Text style={styles.grupoTitulo}>{cargo}</Text>
+                        <View style={styles.petianosGrid}>
+                          {doGrupo.map((petiano) => (
+                            <TouchableOpacity
+                              key={petiano.id}
+                              style={styles.petianoCard}
+                              onPress={() => abrirPetiano(petiano)}
+                            >
+                              {petiano.avatar_url ? (
+                                <Image source={{ uri: petiano.avatar_url }} style={styles.petianoAvatar} />
+                              ) : (
+                                <UserIconSvg size={56} />
+                              )}
+                              <Text style={styles.petianoNome}>{petiano.nome}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    );
+                  })
                 ) : (
                   <Text style={styles.emptyText}>Nenhum petiano cadastrado ainda.</Text>
                 )}
@@ -321,7 +408,7 @@ export default function RelatoriosScreen() {
                     ) : (
                       <>
                         <UploadIconSvg />
-                        <Text style={styles.uploadBtnText}>Enviar novo relatório</Text>
+                        <Text style={styles.uploadBtnText}>Enviar novo relatório (PDF)</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -332,17 +419,27 @@ export default function RelatoriosScreen() {
                 ) : relatorios.length > 0 ? (
                   <View style={styles.relatoriosLista}>
                     {relatorios.map((relatorio) => (
-                      <TouchableOpacity
-                        key={relatorio.uuid}
-                        style={styles.relatorioCard}
-                        onPress={() => abrirArquivo(relatorio.arquivo_url)}
-                      >
-                        <FileIconSvg />
-                        <View style={styles.relatorioInfo}>
-                          <Text style={styles.relatorioNome} numberOfLines={1}>{relatorio.nome_arquivo}</Text>
-                          <Text style={styles.relatorioData}>Enviado em {formatarDataHora(relatorio.created_at)}</Text>
-                        </View>
-                      </TouchableOpacity>
+                      <View key={relatorio.uuid} style={styles.relatorioCard}>
+                        <TouchableOpacity
+                          style={styles.relatorioCardConteudo}
+                          onPress={() => abrirArquivo(relatorio.arquivo_url)}
+                        >
+                          <FileIconSvg />
+                          <View style={styles.relatorioInfo}>
+                            <Text style={styles.relatorioNome} numberOfLines={1}>{relatorio.nome_arquivo}</Text>
+                            <Text style={styles.relatorioData}>Enviado em {formatarDataHora(relatorio.created_at)}</Text>
+                          </View>
+                        </TouchableOpacity>
+
+                        {relatorio.petiano_id === usuarioId && (
+                          <TouchableOpacity
+                            style={styles.excluirBtn}
+                            onPress={() => excluirRelatorio(relatorio)}
+                          >
+                            <TrashIconSvg />
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     ))}
                   </View>
                 ) : (
@@ -377,7 +474,17 @@ const styles = StyleSheet.create({
   subtitle: { color: '#AAAAAA', fontSize: 15, textAlign: 'center' },
   emptyText: { color: '#666', fontSize: 14, textAlign: 'center', marginTop: 20 },
 
-  petianosGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 18 },
+  grupoSection: { marginBottom: 32 },
+  grupoTitulo: {
+    color: '#F0502D',
+    fontSize: 15,
+    fontWeight: 'bold',
+    marginBottom: 14,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  petianosGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 18 },
   petianoCard: {
     width: 140,
     alignItems: 'center',
@@ -389,8 +496,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   petianoAvatar: { width: 56, height: 56, borderRadius: 28 },
-  petianoNome: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginTop: 10, marginBottom: 4 },
-  petianoCargo: { color: '#AAAAAA', fontSize: 12, textAlign: 'center' },
+  petianoNome: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginTop: 10 },
 
   selectedHeader: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 20 },
   selectedAvatar: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: '#F0502D' },
@@ -414,16 +520,30 @@ const styles = StyleSheet.create({
   relatorioCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
     backgroundColor: '#1c1d2b',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#2a2b3d',
+    paddingRight: 10,
+  },
+  relatorioCardConteudo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
     padding: 14,
   },
   relatorioInfo: { flex: 1 },
   relatorioNome: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   relatorioData: { color: '#888', fontSize: 12, marginTop: 2 },
+  excluirBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 68, 68, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
   lockedContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 30 },
   lockedTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold' },
