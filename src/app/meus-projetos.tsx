@@ -67,6 +67,16 @@ export default function MeusProjetosScreen() {
     setCarregando(false);
   };
 
+  const abrirProjeto = (item: MeuProjeto) => {
+    router.push({
+      pathname: '/projetos',
+      params: {
+        projeto: item.projeto.uuid,
+        ano: item.projeto.ano ? String(item.projeto.ano) : '',
+      },
+    });
+  };
+
   return (
     <>
       <Stack.Screen options={{ title: 'Meus Projetos', headerShown: false }} />
@@ -94,7 +104,7 @@ export default function MeusProjetosScreen() {
                   <TouchableOpacity
                     key={item.projeto.uuid}
                     style={styles.card}
-                    onPress={() => router.push('/projetos')}
+                    onPress={() => abrirProjeto(item)}
                   >
                     <View style={styles.cardTopo}>
                       <Text style={styles.cardTitulo}>{item.projeto.titulo}</Text>

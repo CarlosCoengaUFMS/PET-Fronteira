@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import Svg, { Path, Rect, Circle } from 'react-native-svg';
 
 import { ThemedView } from '@/components/themed-view';
+import { supabase } from '../utils/supabase';
 
 // --- ÍCONES ---
 const BackIconSvg = () => (
@@ -31,29 +32,15 @@ const FolderIconSvg = () => (
   </Svg>
 );
 
-// --- TIPO: EVENTO (preparado para vir do banco futuramente) ---
-// Quando a tabela "eventos" existir no Supabase (relacionada à tabela "projetos"
-// que ainda está sendo montada), troque EVENTOS_ATUAIS por uma busca real:
-//
-// const { data, error } = await supabase
-//   .from('eventos')
-//   .select('*, projetos(nome)')
-//   .order('data', { ascending: true });
-//
-interface Evento {
-  id: string;
+// --- TIPOS ---
+interface AtividadeEvento {
+  uuid: string;
   titulo: string;
-  descricao: string;
-  data: string; 
-  horario: string; 
-  local: string;
-  organizador: string;
+  data_inicio: string;
+  status: string | null;
   imagem_url: string | null;
-  status: 'concluido' | 'em_breve';
+  projeto: { titulo: string } | null;
 }
-
-// Array vazio de propósito — ainda sem backend de eventos/projetos.
-const EVENTOS_ATUAIS: Evento[] = [];
 
 const MESES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -62,10 +49,66 @@ const MESES = [
 
 const DIAS_SEMANA = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
 
+const formatarDataHora = (iso: string) => {
+  const data = new Date(iso);
+  return data.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 export default function EventosScreen() {
   const hoje = new Date();
   const [mesAtual, setMesAtual] = useState(hoje.getMonth());
   const [anoAtual, setAnoAtual] = useState(hoje.getFullYear());
+
+  const [carregandoSessao, setCarregandoSessao] = useState(true);
+  const [logado, setLogado] = useState(false);
+
+  const [atividades, setAtividades] = useState<AtividadeEvento[]>([]);
+  const [carregandoAtividades, setCarregandoAtividades] = useState(true);
+
+  useEffect(() => {
+    verificarSessao();
+  }, []);
+
+  const verificarSessao = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      setLogado(true);
+      buscarAtividades();
+    } else {
+      setLogado(false);
+    }
+    setCarregandoSessao(false);
+  };
+
+  const buscarAtividades = async () => {
+    setCarregandoAtividades(true);
+    const { data, error } = await supabase
+      .from('atividade')
+      .select('uuid, titulo, data_inicio, status, imagem_url, projeto:projeto_uuid(titulo)')
+      .not('data_inicio', 'is', null)
+      .order('data_inicio', { ascending: true });
+
+    if (!error && data) {
+      setAtividades(data as any as AtividadeEvento[]);
+    } else if (error) {
+      console.error('Erro ao buscar atividades:', error);
+    }
+    setCarregandoAtividades(false);
+  };
+
+  const voltar = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
+  };
 
   const irParaMesAnterior = () => {
     if (mesAtual === 0) {
@@ -91,7 +134,6 @@ export default function EventosScreen() {
     const ultimoDia = new Date(anoAtual, mesAtual + 1, 0);
     const diasNoMes = ultimoDia.getDate();
 
-    // getDay(): 0 = domingo, 1 = segunda... ajustamos para começar na segunda
     let diaSemanaInicio = primeiroDia.getDay();
     diaSemanaInicio = diaSemanaInicio === 0 ? 6 : diaSemanaInicio - 1;
 
@@ -125,6 +167,45 @@ export default function EventosScreen() {
     );
   };
 
+  // Dias do mês exibido que têm pelo menos uma atividade agendada
+  const diasComEvento = new Set<number>();
+  atividades.forEach((atividade) => {
+    const data = new Date(atividade.data_inicio);
+    if (data.getFullYear() === anoAtual && data.getMonth() === mesAtual) {
+      diasComEvento.add(data.getDate());
+    }
+  });
+
+  if (carregandoSessao) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color="#F0502D" />
+      </View>
+    );
+  }
+
+  if (!logado) {
+    return (
+      <ThemedView style={styles.container}>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={voltar} style={styles.backButton}>
+              <BackIconSvg />
+              <Text style={styles.backButtonText}>Voltar</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.lockedContainer}>
+            <Text style={styles.lockedTitle}>Área restrita</Text>
+            <Text style={styles.lockedText}>Você precisa estar logado para ver o calendário de eventos.</Text>
+            <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/login')}>
+              <Text style={styles.loginBtnText}>Fazer Login</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </ThemedView>
+    );
+  }
+
   return (
     <>
       <Stack.Screen options={{ title: 'Eventos', headerShown: false }} />
@@ -132,7 +213,7 @@ export default function EventosScreen() {
       <ThemedView style={styles.container}>
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <TouchableOpacity onPress={voltar} style={styles.backButton}>
               <BackIconSvg />
               <Text style={styles.backButtonText}>Voltar</Text>
             </TouchableOpacity>
@@ -167,18 +248,26 @@ export default function EventosScreen() {
 
                 {semanas.map((semana, index) => (
                   <View key={index} style={styles.calendarWeekRow}>
-                    {semana.map((dia, i) => (
-                      <View
-                        key={i}
-                        style={[styles.calendarDayCell, ehHoje(dia) && styles.calendarDayCellToday]}
-                      >
-                        {dia !== null && (
-                          <Text style={[styles.calendarDayText, ehHoje(dia) && styles.calendarDayTextToday]}>
-                            {dia}
-                          </Text>
-                        )}
-                      </View>
-                    ))}
+                    {semana.map((dia, i) => {
+                      const hoje = ehHoje(dia);
+                      const comEvento = dia !== null && diasComEvento.has(dia);
+                      return (
+                        <View
+                          key={i}
+                          style={[
+                            styles.calendarDayCell,
+                            hoje && styles.calendarDayCellToday,
+                            !hoje && comEvento && styles.calendarDayCellEvento,
+                          ]}
+                        >
+                          {dia !== null && (
+                            <Text style={[styles.calendarDayText, hoje && styles.calendarDayTextToday]}>
+                              {dia}
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })}
                   </View>
                 ))}
               </View>
@@ -186,43 +275,56 @@ export default function EventosScreen() {
 
             {/* --- LISTA DE EVENTOS --- */}
             <View style={styles.eventosSection}>
-              {EVENTOS_ATUAIS.length > 0 ? (
+              {carregandoAtividades ? (
+                <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 30 }} />
+              ) : atividades.length > 0 ? (
                 <View style={styles.eventosLista}>
-                  {EVENTOS_ATUAIS.map((evento) => (
-                    <View key={evento.id} style={styles.eventoCard}>
-                      {evento.imagem_url ? (
-                        <Image source={{ uri: evento.imagem_url }} style={styles.eventoImagem} />
-                      ) : (
-                        <View style={styles.eventoImagemPlaceholder}>
-                          <FolderIconSvg />
-                        </View>
-                      )}
+                  {atividades.map((atividade) => {
+                    const dataAtividade = new Date(atividade.data_inicio);
+                    const jaPassou = dataAtividade.getTime() < Date.now();
+                    const concluida = atividade.status === 'Concluída';
 
-                      <View style={styles.eventoConteudo}>
-                        <View
-                          style={[
-                            styles.eventoBadge,
-                            evento.status === 'concluido' ? styles.eventoBadgeConcluido : styles.eventoBadgeEmBreve,
-                          ]}
-                        >
-                          <Text style={styles.eventoBadgeText}>
-                            {evento.status === 'concluido' ? 'Concluído' : 'Em breve'}
-                          </Text>
-                        </View>
+                    return (
+                      <View key={atividade.uuid} style={styles.eventoCard}>
+                        {atividade.imagem_url ? (
+                          <Image source={{ uri: atividade.imagem_url }} style={styles.eventoImagem} />
+                        ) : (
+                          <View style={styles.eventoImagemPlaceholder}>
+                            <FolderIconSvg />
+                          </View>
+                        )}
 
-                        <Text style={styles.eventoDataHora}>{evento.data} às {evento.horario}</Text>
-                        <Text style={styles.eventoTitulo}>{evento.titulo}</Text>
-                        <Text style={styles.eventoDescricao}>{evento.descricao}</Text>
-                        <Text style={styles.eventoLocal}>{evento.local} · {evento.organizador}</Text>
+                        <View style={styles.eventoConteudo}>
+                          <View
+                            style={[
+                              styles.eventoBadge,
+                              concluida
+                                ? styles.eventoBadgeConcluido
+                                : jaPassou
+                                ? styles.eventoBadgeAtrasado
+                                : styles.eventoBadgeEmBreve,
+                            ]}
+                          >
+                            <Text style={styles.eventoBadgeText}>
+                              {concluida ? 'Concluído' : jaPassou ? 'Atrasado' : 'Agendado'}
+                            </Text>
+                          </View>
+
+                          <Text style={styles.eventoDataHora}>{formatarDataHora(atividade.data_inicio)}</Text>
+                          <Text style={styles.eventoTitulo}>{atividade.titulo}</Text>
+                          {atividade.projeto?.titulo ? (
+                            <Text style={styles.eventoLocal}>{atividade.projeto.titulo}</Text>
+                          ) : null}
+                        </View>
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               ) : (
                 <View style={styles.eventosEmptyState}>
                   <FolderIconSvg />
                   <Text style={styles.emptyText}>
-                    Nenhum evento cadastrado ainda. Assim que o banco de projetos e eventos estiver pronto, eles aparecerão aqui automaticamente.
+                    Nenhum evento cadastrado ainda. Assim que os líderes de projeto criarem atividades, elas aparecerão aqui automaticamente.
                   </Text>
                 </View>
               )}
@@ -237,6 +339,7 @@ export default function EventosScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#11121C' },
+  center: { justifyContent: 'center', alignItems: 'center' },
   safeArea: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#2a2b3d' },
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -287,6 +390,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   calendarDayCellToday: { backgroundColor: '#F0502D' },
+  calendarDayCellEvento: { borderWidth: 2, borderColor: '#F0502D' },
   calendarDayText: { color: '#CCCCCC', fontSize: 12 },
   calendarDayTextToday: { color: '#FFFFFF', fontWeight: 'bold' },
 
@@ -313,10 +417,10 @@ const styles = StyleSheet.create({
   eventoBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, marginBottom: 4 },
   eventoBadgeConcluido: { backgroundColor: '#2a2b3d' },
   eventoBadgeEmBreve: { backgroundColor: '#1c6fa8' },
+  eventoBadgeAtrasado: { backgroundColor: '#8a4a1c' },
   eventoBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: 'bold' },
   eventoDataHora: { color: '#F0502D', fontSize: 11, fontWeight: 'bold' },
   eventoTitulo: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
-  eventoDescricao: { color: '#AAAAAA', fontSize: 12, lineHeight: 18 },
   eventoLocal: { color: '#666', fontSize: 11, marginTop: 4 },
 
   eventosEmptyState: {
@@ -329,4 +433,10 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     padding: 30,
   },
+
+  lockedContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 30 },
+  lockedTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold' },
+  lockedText: { color: '#AAAAAA', fontSize: 14, textAlign: 'center' },
+  loginBtn: { backgroundColor: '#F0502D', paddingVertical: 12, paddingHorizontal: 28, borderRadius: 8, marginTop: 10 },
+  loginBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
 });

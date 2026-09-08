@@ -617,34 +617,35 @@ export default function HomeScreen() {
               <Text style={styles.heroTitle}>PET Fronteira do Campus de Ponta Porã</Text>
               <Text style={styles.heroSubtitle}>Unindo forças pela educação, cultura e desenvolvimento da região de fronteira</Text>
 
-              {isLoggedIn ? (
-                <View style={styles.heroButtonsWrapper}>
+              <View style={styles.heroButtonsWrapper}>
+                <View style={styles.heroButtons}>
+                  <Link href="/projetos" asChild>
+                    <TouchableOpacity style={styles.btnPrimary}>
+                      <Text style={styles.btnPrimaryText}>Ver Projetos</Text>
+                    </TouchableOpacity>
+                  </Link>
+                  <Link href="/eventos" asChild>
+                    <TouchableOpacity style={styles.btnSecondary}>
+                      <Text style={styles.btnSecondaryText}>Eventos</Text>
+                    </TouchableOpacity>
+                  </Link>
+                </View>
+
+                {isLoggedIn && (
                   <View style={styles.heroButtons}>
-                    <Link href="/projetos" asChild>
-                      <TouchableOpacity style={styles.btnPrimary}>
-                        <Text style={styles.btnPrimaryText}>Ver Projetos</Text>
-                      </TouchableOpacity>
-                    </Link>
                     <Link href="/meus-projetos" asChild>
                       <TouchableOpacity style={styles.btnSecondary}>
                         <Text style={styles.btnSecondaryText}>Meus Projetos</Text>
                       </TouchableOpacity>
                     </Link>
+                    <Link href="/relatorios" asChild>
+                      <TouchableOpacity style={styles.btnSecondary}>
+                        <Text style={styles.btnSecondaryText}>Relatórios</Text>
+                      </TouchableOpacity>
+                    </Link>
                   </View>
-
-                  <Link href="/relatorios" asChild>
-                    <TouchableOpacity style={styles.btnSecondary}>
-                      <Text style={styles.btnSecondaryText}>Relatórios</Text>
-                    </TouchableOpacity>
-                  </Link>
-                </View>
-              ) : (
-                <Link href="/contato" asChild>
-                  <TouchableOpacity style={styles.btnPrimary}>
-                    <Text style={styles.btnPrimaryText}>Venha Conhecer</Text>
-                  </TouchableOpacity>
-                </Link>
-              )}
+                )}
+              </View>
             </View>
 
             {/* Boas-vindas para usuários logados */}
