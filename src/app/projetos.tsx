@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, Link } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 
 import { ThemedView } from '@/components/themed-view';
@@ -73,13 +74,27 @@ const UploadIconSvg = () => (
   </Svg>
 );
 
+const ImageIconSvg = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Rect x="3" y="3" width="18" height="18" rx="2" stroke="#F0502D" strokeWidth="2" />
+    <Circle cx="8.5" cy="8.5" r="1.5" fill="#F0502D" />
+    <Path d="M21 15l-5-5L5 21" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const TrashIconSvg = () => (
+  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 6h18" stroke="#FF4444" strokeWidth="2" strokeLinecap="round" />
+    <Path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="#FF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 // --- TIPOS ---
 interface Projeto {
   uuid: string;
   titulo: string;
   descricao: string | null;
   ano: number | null;
-  status: string | null;
   imagem_url: string | null;
 }
 
@@ -101,13 +116,27 @@ interface Atividade {
   status: string | null;
 }
 
+interface PetianoSimples {
+  id: string;
+  nome: string;
+  avatar_url: string | null;
+  cargo: string;
+}
+
 const ANOS = [2023, 2024, 2025, 2026];
-const STATUS_OPCOES = ['Em andamento', 'Concluído', 'Planejado'];
 
 const formatarData = (iso: string | null) => {
   if (!iso) return '';
   const data = new Date(iso);
   return data.toLocaleDateString('pt-BR');
+};
+
+// Extrai o caminho do arquivo dentro do bucket a partir da URL pública
+const extrairCaminhoStorage = (url: string, bucket: string) => {
+  const marcador = `/${bucket}/`;
+  const indice = url.indexOf(marcador);
+  if (indice === -1) return null;
+  return url.substring(indice + marcador.length);
 };
 
 export default function ProjetosScreen() {
@@ -131,8 +160,11 @@ export default function ProjetosScreen() {
   const [formNovoProjetoVisivel, setFormNovoProjetoVisivel] = useState(false);
   const [novoTitulo, setNovoTitulo] = useState('');
   const [novaDescricao, setNovaDescricao] = useState('');
-  const [novoStatus, setNovoStatus] = useState(STATUS_OPCOES[0]);
+  const [novaImagemLocal, setNovaImagemLocal] = useState<string | null>(null);
   const [enviandoProjeto, setEnviandoProjeto] = useState(false);
+
+  const [petianosDisponiveis, setPetianosDisponiveis] = useState<PetianoSimples[]>([]);
+  const [lideresSelecionados, setLideresSelecionados] = useState<string[]>([]);
 
   const [formNovaAtividadeVisivel, setFormNovaAtividadeVisivel] = useState(false);
   const [atividadeTitulo, setAtividadeTitulo] = useState('');
@@ -148,6 +180,12 @@ export default function ProjetosScreen() {
       buscarPlanejamento(anoSelecionado);
     }
   }, [anoSelecionado, logado]);
+
+  useEffect(() => {
+    if (souTutor) {
+      buscarPetianosParaLideranca();
+    }
+  }, [souTutor]);
 
   const verificarSessao = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -194,6 +232,15 @@ export default function ProjetosScreen() {
     setPlanejamentoUrl(data?.arquivo_url || null);
   };
 
+  const buscarPetianosParaLideranca = async () => {
+    const { data } = await supabase
+      .from('petianos')
+      .select('id, nome, avatar_url, cargo')
+      .neq('cargo', 'Tutor');
+
+    setPetianosDisponiveis((data as PetianoSimples[]) || []);
+  };
+
   const voltar = () => {
     if (router.canGoBack()) {
       router.back();
@@ -202,38 +249,88 @@ export default function ProjetosScreen() {
     }
   };
 
+  const escolherImagemProjeto = async () => {
+    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissao.granted) {
+      Alert.alert('Permissão negada', 'Precisamos de acesso às suas fotos.');
+      return;
+    }
+
+    const resultado = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.6,
+    });
+
+    if (!resultado.canceled) {
+      setNovaImagemLocal(resultado.assets[0].uri);
+    }
+  };
+
+  const toggleLider = (id: string) => {
+    setLideresSelecionados((atual) =>
+      atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id]
+    );
+  };
+
   // --- CRIAR PROJETO (temporário, remover quando todos os projetos reais forem cadastrados) ---
   const criarProjeto = async () => {
-    if (!novoTitulo.trim() || !usuarioId) {
+    if (!novoTitulo.trim()) {
       Alert.alert('Erro', 'Digite o título do projeto.');
       return;
     }
 
     setEnviandoProjeto(true);
     try {
+      // Faz o upload da imagem ANTES de criar o projeto, e já insere
+      // com o imagem_url preenchido — evita depender de um UPDATE depois.
+      let imagemUrl: string | null = null;
+
+      if (novaImagemLocal) {
+        const resposta = await fetch(novaImagemLocal);
+        const blob = await resposta.blob();
+        const caminho = `${usuarioId}/${Date.now()}.jpg`;
+
+        const { error: erroUpload } = await supabase.storage
+          .from('projetos')
+          .upload(caminho, blob, { contentType: 'image/jpeg' });
+
+        if (erroUpload) {
+          throw new Error('Falha ao enviar a imagem. Verifique se o bucket "projetos" foi criado como Public.');
+        }
+
+        const { data: urlData } = supabase.storage.from('projetos').getPublicUrl(caminho);
+        imagemUrl = urlData.publicUrl;
+      }
+
       const { data: novo, error } = await supabase
         .from('projeto')
         .insert({
           titulo: novoTitulo,
           descricao: novaDescricao,
           ano: anoSelecionado,
-          status: novoStatus,
+          imagem_url: imagemUrl,
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      // quem cria o projeto vira automaticamente o líder
-      await supabase.from('petianos_has_projeto').insert({
-        petiano_id: usuarioId,
-        projeto_uuid: novo.uuid,
-        tipo_responsavel: 'lider',
-      });
+      // Os líderes escolhidos pelo Tutor entram como 'lider' do projeto
+      if (lideresSelecionados.length > 0) {
+        const linhas = lideresSelecionados.map((petianoId) => ({
+          petiano_id: petianoId,
+          projeto_uuid: novo.uuid,
+          tipo_responsavel: 'lider',
+        }));
+        await supabase.from('petianos_has_projeto').insert(linhas);
+      }
 
       setNovoTitulo('');
       setNovaDescricao('');
-      setNovoStatus(STATUS_OPCOES[0]);
+      setNovaImagemLocal(null);
+      setLideresSelecionados([]);
       setFormNovoProjetoVisivel(false);
       buscarProjetos(anoSelecionado);
     } catch (error: any) {
@@ -374,6 +471,53 @@ export default function ProjetosScreen() {
       Alert.alert('Erro', error.message || 'Não foi possível enviar o planejamento.');
     } finally {
       setEnviandoPlanejamento(false);
+    }
+  };
+
+  const confirmarAcao = (mensagem: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (Platform.OS === 'web') {
+        resolve(window.confirm(mensagem));
+      } else {
+        Alert.alert(
+          'Confirmar',
+          mensagem,
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Excluir', style: 'destructive', onPress: () => resolve(true) },
+          ]
+        );
+      }
+    });
+  };
+
+  const excluirProjeto = async () => {
+    if (!projetoSelecionado) return;
+
+    const confirmado = await confirmarAcao(
+      'Tem certeza que deseja excluir este projeto? Essa ação não pode ser desfeita.'
+    );
+    if (!confirmado) return;
+
+    try {
+      await supabase.from('atividade').delete().eq('projeto_uuid', projetoSelecionado.uuid);
+      await supabase.from('petianos_has_projeto').delete().eq('projeto_uuid', projetoSelecionado.uuid);
+
+      if (projetoSelecionado.imagem_url) {
+        const caminho = extrairCaminhoStorage(projetoSelecionado.imagem_url, 'projetos');
+        if (caminho) {
+          await supabase.storage.from('projetos').remove([caminho]);
+        }
+      }
+
+      const { error } = await supabase.from('projeto').delete().eq('uuid', projetoSelecionado.uuid);
+      if (error) throw error;
+
+      voltarParaLista();
+      buscarProjetos(anoSelecionado);
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert('Erro', 'Não foi possível excluir o projeto.');
     }
   };
 
@@ -525,19 +669,41 @@ export default function ProjetosScreen() {
                       multiline
                       numberOfLines={3}
                     />
-                    <View style={styles.statusRow}>
-                      {STATUS_OPCOES.map((opcao) => (
-                        <TouchableOpacity
-                          key={opcao}
-                          style={[styles.statusChip, novoStatus === opcao && styles.statusChipAtivo]}
-                          onPress={() => setNovoStatus(opcao)}
-                        >
-                          <Text style={[styles.statusChipText, novoStatus === opcao && styles.statusChipTextAtivo]}>
-                            {opcao}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
+
+                    <TouchableOpacity style={styles.imagemPickerBtn} onPress={escolherImagemProjeto}>
+                      {novaImagemLocal ? (
+                        <Image source={{ uri: novaImagemLocal }} style={styles.imagemPreview} />
+                      ) : (
+                        <View style={styles.imagemPickerPlaceholder}>
+                          <ImageIconSvg />
+                          <Text style={styles.imagemPickerText}>Escolher imagem do projeto</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+
+                    <Text style={styles.lideresLabel}>Líderes do projeto</Text>
+                    <View style={styles.lideresGrid}>
+                      {petianosDisponiveis.map((petiano) => {
+                        const selecionado = lideresSelecionados.includes(petiano.id);
+                        return (
+                          <TouchableOpacity
+                            key={petiano.id}
+                            style={[styles.liderChip, selecionado && styles.liderChipAtivo]}
+                            onPress={() => toggleLider(petiano.id)}
+                          >
+                            {petiano.avatar_url ? (
+                              <Image source={{ uri: petiano.avatar_url }} style={styles.liderChipAvatar} />
+                            ) : (
+                              <UserIconSvg size={24} />
+                            )}
+                            <Text style={[styles.liderChipText, selecionado && styles.liderChipTextAtivo]} numberOfLines={1}>
+                              {petiano.nome}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
+
                     <TouchableOpacity
                       style={[styles.salvarProjetoBtn, enviandoProjeto && styles.uploadBtnDisabled]}
                       onPress={criarProjeto}
@@ -574,11 +740,6 @@ export default function ProjetosScreen() {
                         {projeto.descricao ? (
                           <Text style={styles.projetoDesc} numberOfLines={3}>{projeto.descricao}</Text>
                         ) : null}
-                        {projeto.status ? (
-                          <View style={styles.projetoStatusBadge}>
-                            <Text style={styles.projetoStatusText}>{projeto.status}</Text>
-                          </View>
-                        ) : null}
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -589,12 +750,19 @@ export default function ProjetosScreen() {
             ) : (
               <>
                 {/* --- DETALHE DO PROJETO --- */}
-                <Text style={styles.detalheTitulo}>{projetoSelecionado.titulo}</Text>
-                {projetoSelecionado.status ? (
-                  <View style={styles.projetoStatusBadge}>
-                    <Text style={styles.projetoStatusText}>{projetoSelecionado.status}</Text>
-                  </View>
-                ) : null}
+                {projetoSelecionado.imagem_url && (
+                  <Image source={{ uri: projetoSelecionado.imagem_url }} style={styles.detalheImagem} />
+                )}
+
+                <View style={styles.detalheTituloRow}>
+                  <Text style={styles.detalheTitulo}>{projetoSelecionado.titulo}</Text>
+                  {souTutor && (
+                    <TouchableOpacity style={styles.excluirProjetoBtn} onPress={excluirProjeto}>
+                      <TrashIconSvg />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
                 {projetoSelecionado.descricao ? (
                   <Text style={styles.detalheDescricao}>{projetoSelecionado.descricao}</Text>
                 ) : null}
@@ -739,26 +907,56 @@ const styles = StyleSheet.create({
   novoProjetoForm: { backgroundColor: '#1c1d2b', borderRadius: 12, borderWidth: 1, borderColor: '#2a2b3d', padding: 16, gap: 12, marginBottom: 20 },
   input: { backgroundColor: '#11121C', borderRadius: 8, padding: 12, color: '#FFFFFF', fontSize: 14, borderWidth: 1, borderColor: '#2a2b3d' },
   textArea: { minHeight: 70, textAlignVertical: 'top' },
-  statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  statusChip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, borderWidth: 1, borderColor: '#2a2b3d' },
-  statusChipAtivo: { backgroundColor: '#F0502D', borderColor: '#F0502D' },
-  statusChipText: { color: '#AAAAAA', fontSize: 12 },
-  statusChipTextAtivo: { color: '#FFFFFF', fontWeight: 'bold' },
+  uploadBtnDisabled: { opacity: 0.7 },
+
+  imagemPickerBtn: { borderRadius: 8, overflow: 'hidden' },
+  imagemPreview: { width: '100%', height: 140, borderRadius: 8 },
+  imagemPickerPlaceholder: {
+    height: 100,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  imagemPickerText: { color: '#F0502D', fontSize: 13, fontWeight: '600' },
+
+  lideresLabel: { color: '#CCCCCC', fontSize: 13, fontWeight: '600' },
+  lideresGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  liderChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#11121C',
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    maxWidth: 150,
+  },
+  liderChipAtivo: { backgroundColor: 'rgba(240,80,45,0.15)', borderColor: '#F0502D' },
+  liderChipAvatar: { width: 24, height: 24, borderRadius: 12 },
+  liderChipText: { color: '#AAAAAA', fontSize: 12 },
+  liderChipTextAtivo: { color: '#F0502D', fontWeight: 'bold' },
+
   salvarProjetoBtn: { backgroundColor: '#F0502D', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
   salvarProjetoBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
-  uploadBtnDisabled: { opacity: 0.7 },
 
   projetosGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'center' },
   projetoCard: { width: 220, backgroundColor: '#1c1d2b', borderRadius: 14, borderWidth: 1, borderColor: '#2a2b3d', overflow: 'hidden', padding: 14 },
   projetoImagem: { width: '100%', height: 100, borderRadius: 8, marginBottom: 10 },
   projetoImagemPlaceholder: { width: '100%', height: 100, borderRadius: 8, backgroundColor: '#2a2b3d', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   projetoNome: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold', marginBottom: 4 },
-  projetoDesc: { color: '#AAAAAA', fontSize: 12, lineHeight: 18, marginBottom: 8 },
-  projetoStatusBadge: { alignSelf: 'flex-start', backgroundColor: 'rgba(240,80,45,0.15)', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8, marginTop: 4 },
-  projetoStatusText: { color: '#F0502D', fontSize: 11, fontWeight: 'bold' },
+  projetoDesc: { color: '#AAAAAA', fontSize: 12, lineHeight: 18 },
 
-  detalheTitulo: { color: '#FFFFFF', fontSize: 24, fontWeight: 'bold', marginBottom: 8 },
-  detalheDescricao: { color: '#AAAAAA', fontSize: 14, lineHeight: 21, marginTop: 10, marginBottom: 20 },
+  detalheImagem: { width: '100%', height: 180, borderRadius: 12, marginBottom: 16 },
+  detalheTituloRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  detalheTitulo: { color: '#FFFFFF', fontSize: 24, fontWeight: 'bold', marginBottom: 8, flex: 1 },
+  excluirProjetoBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,68,68,0.1)', justifyContent: 'center', alignItems: 'center' },
+  detalheDescricao: { color: '#AAAAAA', fontSize: 14, lineHeight: 21, marginBottom: 20 },
 
   participarBtn: { backgroundColor: '#F0502D', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginBottom: 20 },
   participarBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
