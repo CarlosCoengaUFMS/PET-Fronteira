@@ -26,6 +26,13 @@ const BackIconSvg = () => (
   </Svg>
 );
 
+const HomeIconSvg = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 11l9-8 9 8" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 const UserIconSvg = ({ size = 56 }: { size?: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Circle cx="12" cy="12" r="11" fill="#2a2b3d" stroke="#F0502D" strokeWidth="2" />
@@ -149,7 +156,6 @@ export default function RelatoriosScreen() {
     setPetianoSelecionado(petiano);
     setCarregandoRelatorios(true);
 
-    // Mais antigo primeiro, mais recente por último (ascending)
     const { data, error } = await supabase
       .from('relatorios')
       .select('*')
@@ -179,6 +185,10 @@ export default function RelatoriosScreen() {
     }
   };
 
+  const irParaHome = () => {
+    router.push('/');
+  };
+
   const enviarRelatorio = async () => {
     if (!usuarioId) return;
 
@@ -191,7 +201,6 @@ export default function RelatoriosScreen() {
 
     const arquivo = resultado.assets[0];
 
-    // Checagem extra, já que em alguns navegadores o filtro de tipo pode não ser respeitado
     const ehPdf =
       arquivo.mimeType === 'application/pdf' ||
       arquivo.name.toLowerCase().endsWith('.pdf');
@@ -306,6 +315,9 @@ export default function RelatoriosScreen() {
               <BackIconSvg />
               <Text style={styles.backButtonText}>Voltar</Text>
             </TouchableOpacity>
+            <TouchableOpacity onPress={irParaHome} style={styles.homeBtn}>
+              <HomeIconSvg />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.lockedContainer}>
@@ -336,6 +348,9 @@ export default function RelatoriosScreen() {
               <Text style={styles.backButtonText}>
                 {petianoSelecionado ? 'Voltar para a lista' : 'Voltar'}
               </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={irParaHome} style={styles.homeBtn}>
+              <HomeIconSvg />
             </TouchableOpacity>
           </View>
 
@@ -463,9 +478,19 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#11121C' },
   center: { justifyContent: 'center', alignItems: 'center' },
   safeArea: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#2a2b3d' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#2a2b3d' },
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   backButtonText: { color: '#F0502D', fontSize: 16, fontWeight: '500' },
+  homeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1c1d2b',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+  },
   scrollContainer: { flexGrow: 1, padding: 20 },
 
   titleSection: { alignItems: 'center', marginBottom: 30 },

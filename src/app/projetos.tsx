@@ -28,6 +28,13 @@ const BackIconSvg = () => (
   </Svg>
 );
 
+const HomeIconSvg = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 11l9-8 9 8" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 const UserIconSvg = ({ size = 40 }: { size?: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Circle cx="12" cy="12" r="11" fill="#2a2b3d" stroke="#F0502D" strokeWidth="2" />
@@ -111,6 +118,7 @@ interface MembroProjeto {
 interface Atividade {
   uuid: string;
   titulo: string;
+  sobre: string | null;
   data_inicio: string | null;
   status: string | null;
   imagem_url: string | null;
@@ -133,12 +141,6 @@ const mostrarAlerta = (titulo: string, mensagem: string) => {
   } else {
     Alert.alert(titulo, mensagem);
   }
-};
-
-const formatarData = (iso: string | null) => {
-  if (!iso) return '';
-  const data = new Date(iso);
-  return data.toLocaleDateString('pt-BR');
 };
 
 const formatarDataHoraAtividade = (iso: string | null) => {
@@ -236,6 +238,7 @@ export default function ProjetosScreen() {
 
   const [formNovaAtividadeVisivel, setFormNovaAtividadeVisivel] = useState(false);
   const [atividadeTitulo, setAtividadeTitulo] = useState('');
+  const [atividadeSobre, setAtividadeSobre] = useState('');
   const [atividadeData, setAtividadeData] = useState('');
   const [atividadeHora, setAtividadeHora] = useState('');
   const [novaImagemAtividadeLocal, setNovaImagemAtividadeLocal] = useState<string | null>(null);
@@ -341,6 +344,10 @@ export default function ProjetosScreen() {
     }
   };
 
+  const irParaHome = () => {
+    router.push('/');
+  };
+
   const escolherImagemProjeto = async () => {
     const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissao.granted) {
@@ -352,7 +359,7 @@ export default function ProjetosScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [16, 9],
-      quality: 0.6,
+      quality: 1,
     });
 
     if (!resultado.canceled) {
@@ -371,7 +378,7 @@ export default function ProjetosScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [16, 9],
-      quality: 0.6,
+      quality: 1,
     });
 
     if (!resultado.canceled) {
@@ -464,7 +471,7 @@ export default function ProjetosScreen() {
 
     const { data: atividadesData } = await supabase
       .from('atividade')
-      .select('uuid, titulo, data_inicio, status, imagem_url')
+      .select('uuid, titulo, sobre, data_inicio, status, imagem_url')
       .eq('projeto_uuid', projeto.uuid)
       .order('data_inicio', { ascending: true });
 
@@ -558,6 +565,7 @@ export default function ProjetosScreen() {
       const { error } = await supabase.from('atividade').insert({
         projeto_uuid: projetoSelecionado.uuid,
         titulo: atividadeTitulo,
+        sobre: atividadeSobre,
         data_inicio: dataHora.toISOString(),
         imagem_url: imagemUrl,
       });
@@ -565,6 +573,7 @@ export default function ProjetosScreen() {
       if (error) throw error;
 
       setAtividadeTitulo('');
+      setAtividadeSobre('');
       setAtividadeData('');
       setAtividadeHora('');
       setNovaImagemAtividadeLocal(null);
@@ -585,7 +594,8 @@ export default function ProjetosScreen() {
       .eq('uuid', atividade.uuid);
 
     if (error) {
-      mostrarAlerta('Erro', 'Não foi possível marcar como concluída.');
+      console.error('Erro ao marcar concluída:', error);
+      mostrarAlerta('Erro', `Não foi possível marcar como concluída.\n\nDetalhe: ${error.message}`);
       return;
     }
 
@@ -605,7 +615,8 @@ export default function ProjetosScreen() {
       .eq('uuid', atividade.uuid);
 
     if (error) {
-      mostrarAlerta('Erro', 'Não foi possível adiar a atividade.');
+      console.error('Erro ao adiar atividade:', error);
+      mostrarAlerta('Erro', `Não foi possível adiar a atividade.\n\nDetalhe: ${error.message}`);
       return;
     }
 
@@ -613,6 +624,49 @@ export default function ProjetosScreen() {
     setReagendarData('');
     setReagendarHora('');
     if (projetoSelecionado) selecionarProjeto(projetoSelecionado);
+  };
+
+  const confirmarAcao = (mensagem: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (Platform.OS === 'web') {
+        resolve(window.confirm(mensagem));
+      } else {
+        Alert.alert(
+          'Confirmar',
+          mensagem,
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Excluir', style: 'destructive', onPress: () => resolve(true) },
+          ]
+        );
+      }
+    });
+  };
+
+  const excluirAtividade = async (atividade: Atividade) => {
+    const confirmado = await confirmarAcao('Tem certeza que deseja excluir esta atividade?');
+    if (!confirmado) return;
+
+    try {
+      if (atividade.imagem_url) {
+        const caminho = extrairCaminhoStorage(atividade.imagem_url, 'atividades');
+        if (caminho) {
+          await supabase.storage.from('atividades').remove([caminho]);
+        }
+      }
+
+      const { error } = await supabase.from('atividade').delete().eq('uuid', atividade.uuid);
+      if (error) throw error;
+
+      if (atividadeReagendandoUuid === atividade.uuid) {
+        setAtividadeReagendandoUuid(null);
+      }
+
+      if (projetoSelecionado) selecionarProjeto(projetoSelecionado);
+    } catch (error: any) {
+      console.error('Erro ao excluir atividade:', error);
+      mostrarAlerta('Erro', `Não foi possível excluir a atividade.\n\nDetalhe: ${error.message}`);
+    }
   };
 
   const enviarPlanejamento = async () => {
@@ -653,23 +707,6 @@ export default function ProjetosScreen() {
     } finally {
       setEnviandoPlanejamento(false);
     }
-  };
-
-  const confirmarAcao = (mensagem: string): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (Platform.OS === 'web') {
-        resolve(window.confirm(mensagem));
-      } else {
-        Alert.alert(
-          'Confirmar',
-          mensagem,
-          [
-            { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Excluir', style: 'destructive', onPress: () => resolve(true) },
-          ]
-        );
-      }
-    });
   };
 
   const excluirProjeto = async () => {
@@ -714,6 +751,98 @@ export default function ProjetosScreen() {
     );
   }
 
+  const atividadesPendentes = atividades.filter((a) => a.status !== 'Concluída');
+  const atividadesConcluidas = atividades.filter((a) => a.status === 'Concluída');
+
+  const renderAtividade = (atividade: Atividade) => {
+    const dataAtividade = atividade.data_inicio ? new Date(atividade.data_inicio) : null;
+    const jaPassou = dataAtividade ? dataAtividade.getTime() < Date.now() : false;
+    const concluida = atividade.status === 'Concluída';
+    const reagendando = atividadeReagendandoUuid === atividade.uuid;
+
+    return (
+      <View key={atividade.uuid} style={styles.atividadeCard}>
+        {atividade.imagem_url && (
+          <Image source={{ uri: atividade.imagem_url }} style={styles.atividadeImagem} resizeMode="cover" />
+        )}
+        <Text style={styles.atividadeTitulo}>{atividade.titulo}</Text>
+        {atividade.data_inicio ? (
+          <Text style={styles.atividadeData}>{formatarDataHoraAtividade(atividade.data_inicio)}</Text>
+        ) : null}
+        {atividade.sobre ? (
+          <Text style={styles.atividadeSobre}>{atividade.sobre}</Text>
+        ) : null}
+
+        <View
+          style={[
+            styles.atividadeStatusBadge,
+            concluida
+              ? styles.atividadeStatusConcluida
+              : jaPassou
+              ? styles.atividadeStatusAtrasada
+              : styles.atividadeStatusAgendada,
+          ]}
+        >
+          <Text style={styles.atividadeStatusText}>
+            {concluida ? 'Concluída' : jaPassou ? 'Atrasada' : 'Agendada'}
+          </Text>
+        </View>
+
+        {souLider && (
+          <View style={styles.atividadeAcoes}>
+            {!concluida && jaPassou && (
+              <TouchableOpacity style={styles.atividadeAcaoBtn} onPress={() => marcarConcluida(atividade)}>
+                <Text style={styles.atividadeAcaoBtnText}>Marcar como concluída</Text>
+              </TouchableOpacity>
+            )}
+            {!concluida && (
+              <TouchableOpacity
+                style={styles.atividadeAcaoBtnSecundario}
+                onPress={() => setAtividadeReagendandoUuid(reagendando ? null : atividade.uuid)}
+              >
+                <Text style={styles.atividadeAcaoBtnSecundarioText}>
+                  {reagendando ? 'Cancelar' : 'Adiar'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.atividadeExcluirBtn}
+              onPress={() => excluirAtividade(atividade)}
+            >
+              <TrashIconSvg />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {reagendando && (
+          <View style={styles.reagendarForm}>
+            <TextInput
+              style={styles.input}
+              placeholder="Nova data (DD/MM/AAAA)"
+              placeholderTextColor="#666"
+              value={reagendarData}
+              onChangeText={(texto) => setReagendarData(formatarDataInput(texto))}
+              keyboardType="numeric"
+              maxLength={10}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Nova hora (HH:MM)"
+              placeholderTextColor="#666"
+              value={reagendarHora}
+              onChangeText={(texto) => setReagendarHora(formatarHoraInput(texto))}
+              keyboardType="numeric"
+              maxLength={5}
+            />
+            <TouchableOpacity style={styles.salvarProjetoBtn} onPress={() => confirmarReagendamento(atividade)}>
+              <Text style={styles.salvarProjetoBtnText}>Confirmar novo horário</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <>
       <Stack.Screen options={{ title: 'Projetos', headerShown: false }} />
@@ -731,13 +860,18 @@ export default function ProjetosScreen() {
               </Text>
             </TouchableOpacity>
 
-            {!projetoSelecionado && logado && (
-              <Link href="/meus-projetos" asChild>
-                <TouchableOpacity style={styles.meusProjetosBtn}>
-                  <Text style={styles.meusProjetosBtnText}>Meus Projetos</Text>
-                </TouchableOpacity>
-              </Link>
-            )}
+            <View style={styles.headerRight}>
+              {!projetoSelecionado && logado && (
+                <Link href="/meus-projetos" asChild>
+                  <TouchableOpacity style={styles.meusProjetosBtn}>
+                    <Text style={styles.meusProjetosBtnText}>Meus Projetos</Text>
+                  </TouchableOpacity>
+                </Link>
+              )}
+              <TouchableOpacity onPress={irParaHome} style={styles.homeBtn}>
+                <HomeIconSvg />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
@@ -831,7 +965,7 @@ export default function ProjetosScreen() {
 
                     <TouchableOpacity style={styles.imagemPickerBtn} onPress={escolherImagemProjeto}>
                       {novaImagemLocal ? (
-                        <Image source={{ uri: novaImagemLocal }} style={styles.imagemPreview} />
+                        <Image source={{ uri: novaImagemLocal }} style={styles.imagemPreview} resizeMode="cover" />
                       ) : (
                         <View style={styles.imagemPickerPlaceholder}>
                           <ImageIconSvg />
@@ -889,7 +1023,7 @@ export default function ProjetosScreen() {
                         onPress={() => selecionarProjeto(projeto)}
                       >
                         {projeto.imagem_url ? (
-                          <Image source={{ uri: projeto.imagem_url }} style={styles.projetoImagem} />
+                          <Image source={{ uri: projeto.imagem_url }} style={styles.projetoImagem} resizeMode="cover" />
                         ) : (
                           <View style={styles.projetoImagemPlaceholder}>
                             <FolderIconSvg />
@@ -910,7 +1044,7 @@ export default function ProjetosScreen() {
               <>
                 {/* --- DETALHE DO PROJETO --- */}
                 {projetoSelecionado.imagem_url && (
-                  <Image source={{ uri: projetoSelecionado.imagem_url }} style={styles.detalheImagem} />
+                  <Image source={{ uri: projetoSelecionado.imagem_url }} style={styles.detalheImagem} resizeMode="cover" />
                 )}
 
                 <View style={styles.detalheTituloRow}>
@@ -985,6 +1119,15 @@ export default function ProjetosScreen() {
                           value={atividadeTitulo}
                           onChangeText={setAtividadeTitulo}
                         />
+                        <TextInput
+                          style={[styles.input, styles.textArea]}
+                          placeholder="Sobre a atividade (opcional)"
+                          placeholderTextColor="#666"
+                          value={atividadeSobre}
+                          onChangeText={setAtividadeSobre}
+                          multiline
+                          numberOfLines={3}
+                        />
                         <View style={styles.dataHoraRow}>
                           <TextInput
                             style={[styles.input, styles.dataHoraInput]}
@@ -1008,7 +1151,7 @@ export default function ProjetosScreen() {
 
                         <TouchableOpacity style={styles.imagemPickerBtn} onPress={escolherImagemAtividade}>
                           {novaImagemAtividadeLocal ? (
-                            <Image source={{ uri: novaImagemAtividadeLocal }} style={styles.imagemPreview} />
+                            <Image source={{ uri: novaImagemAtividadeLocal }} style={styles.imagemPreview} resizeMode="cover" />
                           ) : (
                             <View style={styles.imagemPickerPlaceholder}>
                               <ImageIconSvg />
@@ -1031,96 +1174,23 @@ export default function ProjetosScreen() {
                       </View>
                     )}
 
-                    {atividades.length > 0 ? (
+                    {/* --- ATIVIDADES PENDENTES (agendadas ou atrasadas) --- */}
+                    {atividadesPendentes.length > 0 ? (
                       <View style={styles.atividadesLista}>
-                        {atividades.map((atividade) => {
-                          const dataAtividade = atividade.data_inicio ? new Date(atividade.data_inicio) : null;
-                          const jaPassou = dataAtividade ? dataAtividade.getTime() < Date.now() : false;
-                          const concluida = atividade.status === 'Concluída';
-                          const reagendando = atividadeReagendandoUuid === atividade.uuid;
-
-                          return (
-                            <View key={atividade.uuid} style={styles.atividadeCard}>
-                              {atividade.imagem_url && (
-                                <Image source={{ uri: atividade.imagem_url }} style={styles.atividadeImagem} />
-                              )}
-                              <Text style={styles.atividadeTitulo}>{atividade.titulo}</Text>
-                              {atividade.data_inicio ? (
-                                <Text style={styles.atividadeData}>{formatarDataHoraAtividade(atividade.data_inicio)}</Text>
-                              ) : null}
-
-                              <View
-                                style={[
-                                  styles.atividadeStatusBadge,
-                                  concluida
-                                    ? styles.atividadeStatusConcluida
-                                    : jaPassou
-                                    ? styles.atividadeStatusAtrasada
-                                    : styles.atividadeStatusAgendada,
-                                ]}
-                              >
-                                <Text style={styles.atividadeStatusText}>
-                                  {concluida ? 'Concluída' : jaPassou ? 'Atrasada' : 'Agendada'}
-                                </Text>
-                              </View>
-
-                              {souLider && (
-                                <View style={styles.atividadeAcoes}>
-                                  {!concluida && jaPassou && (
-                                    <TouchableOpacity
-                                      style={styles.atividadeAcaoBtn}
-                                      onPress={() => marcarConcluida(atividade)}
-                                    >
-                                      <Text style={styles.atividadeAcaoBtnText}>Marcar como concluída</Text>
-                                    </TouchableOpacity>
-                                  )}
-                                  <TouchableOpacity
-                                    style={styles.atividadeAcaoBtnSecundario}
-                                    onPress={() =>
-                                      setAtividadeReagendandoUuid(reagendando ? null : atividade.uuid)
-                                    }
-                                  >
-                                    <Text style={styles.atividadeAcaoBtnSecundarioText}>
-                                      {reagendando ? 'Cancelar' : 'Adiar'}
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
-                              )}
-
-                              {reagendando && (
-                                <View style={styles.reagendarForm}>
-                                  <TextInput
-                                    style={styles.input}
-                                    placeholder="Nova data (DD/MM/AAAA)"
-                                    placeholderTextColor="#666"
-                                    value={reagendarData}
-                                    onChangeText={(texto) => setReagendarData(formatarDataInput(texto))}
-                                    keyboardType="numeric"
-                                    maxLength={10}
-                                  />
-                                  <TextInput
-                                    style={styles.input}
-                                    placeholder="Nova hora (HH:MM)"
-                                    placeholderTextColor="#666"
-                                    value={reagendarHora}
-                                    onChangeText={(texto) => setReagendarHora(formatarHoraInput(texto))}
-                                    keyboardType="numeric"
-                                    maxLength={5}
-                                  />
-                                  <TouchableOpacity
-                                    style={styles.salvarProjetoBtn}
-                                    onPress={() => confirmarReagendamento(atividade)}
-                                  >
-                                    <Text style={styles.salvarProjetoBtnText}>Confirmar novo horário</Text>
-                                  </TouchableOpacity>
-                                </View>
-                              )}
-                            </View>
-                          );
-                        })}
+                        {atividadesPendentes.map(renderAtividade)}
                       </View>
                     ) : (
-                      <Text style={styles.emptyText}>Nenhuma atividade cadastrada ainda.</Text>
+                      <Text style={styles.emptyText}>Nenhuma atividade pendente no momento.</Text>
+                    )}
+
+                    {/* --- ATIVIDADES CONCLUÍDAS (separadas, não atrapalham as pendentes) --- */}
+                    {atividadesConcluidas.length > 0 && (
+                      <>
+                        <Text style={[styles.secaoTitulo, styles.secaoConcluidasTitulo]}>Concluídas</Text>
+                        <View style={styles.atividadesLista}>
+                          {atividadesConcluidas.map(renderAtividade)}
+                        </View>
+                      </>
                     )}
                   </>
                 )}
@@ -1141,8 +1211,19 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#2a2b3d' },
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   backButtonText: { color: '#F0502D', fontSize: 16, fontWeight: '500' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   meusProjetosBtn: { borderWidth: 1, borderColor: '#F0502D', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
   meusProjetosBtnText: { color: '#F0502D', fontSize: 13, fontWeight: 'bold' },
+  homeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1c1d2b',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+  },
   scrollContainer: { flexGrow: 1, padding: 20 },
 
   titleSection: { alignItems: 'center', marginBottom: 24 },
@@ -1239,6 +1320,7 @@ const styles = StyleSheet.create({
   sairBtnText: { color: '#FF4444', fontSize: 14, fontWeight: 'bold' },
 
   secaoTitulo: { color: '#FFFFFF', fontSize: 17, fontWeight: 'bold', marginBottom: 14 },
+  secaoConcluidasTitulo: { marginTop: 24, opacity: 0.7 },
   membrosGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
   membroCard: { width: 100, alignItems: 'center', backgroundColor: '#1c1d2b', borderRadius: 10, borderWidth: 1, borderColor: '#2a2b3d', paddingVertical: 14, paddingHorizontal: 6 },
   membroAvatar: { width: 44, height: 44, borderRadius: 22 },
@@ -1253,15 +1335,24 @@ const styles = StyleSheet.create({
   atividadeImagem: { width: '100%', height: 130, borderRadius: 8, marginBottom: 6 },
   atividadeTitulo: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   atividadeData: { color: '#888', fontSize: 12 },
+  atividadeSobre: { color: '#AAAAAA', fontSize: 12, lineHeight: 18, marginTop: 4 },
   atividadeStatusBadge: { alignSelf: 'flex-start', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8, marginTop: 2 },
   atividadeStatusAgendada: { backgroundColor: '#1c6fa8' },
   atividadeStatusAtrasada: { backgroundColor: '#8a4a1c' },
   atividadeStatusConcluida: { backgroundColor: '#2a2b3d' },
   atividadeStatusText: { color: '#FFFFFF', fontSize: 10, fontWeight: 'bold' },
-  atividadeAcoes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  atividadeAcoes: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 8 },
   atividadeAcaoBtn: { backgroundColor: '#F0502D', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6 },
   atividadeAcaoBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
   atividadeAcaoBtnSecundario: { borderWidth: 1, borderColor: '#F0502D', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6 },
   atividadeAcaoBtnSecundarioText: { color: '#F0502D', fontSize: 12, fontWeight: 'bold' },
+  atividadeExcluirBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,68,68,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   reagendarForm: { gap: 10, marginTop: 10 },
 });

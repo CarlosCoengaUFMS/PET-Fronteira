@@ -13,6 +13,13 @@ const BackIconSvg = () => (
   </Svg>
 );
 
+const HomeIconSvg = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 11l9-8 9 8" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 const CrownIconSvg = () => (
   <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
     <Path d="M2 8l4 4 6-8 6 8 4-4-2 12H4L2 8z" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="rgba(240,80,45,0.15)" />
@@ -43,6 +50,10 @@ export default function MeusProjetosScreen() {
     } else {
       router.replace('/');
     }
+  };
+
+  const irParaHome = () => {
+    router.push('/');
   };
 
   const buscarMeusProjetos = async () => {
@@ -88,6 +99,9 @@ export default function MeusProjetosScreen() {
               <BackIconSvg />
               <Text style={styles.backButtonText}>Voltar</Text>
             </TouchableOpacity>
+            <TouchableOpacity onPress={irParaHome} style={styles.homeBtn}>
+              <HomeIconSvg />
+            </TouchableOpacity>
           </View>
 
           <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
@@ -131,9 +145,19 @@ export default function MeusProjetosScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#11121C' },
   safeArea: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#2a2b3d' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#2a2b3d' },
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   backButtonText: { color: '#F0502D', fontSize: 16, fontWeight: '500' },
+  homeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1c1d2b',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+  },
   scrollContainer: { flexGrow: 1, padding: 20 },
   title: { color: '#FFFFFF', fontSize: 26, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
   orangeHighlight: { color: '#F0502D' },

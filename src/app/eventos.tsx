@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import Svg, { Path, Rect, Circle } from 'react-native-svg';
@@ -11,6 +11,13 @@ import { supabase } from '../utils/supabase';
 const BackIconSvg = () => (
   <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
     <Path d="M15 18l-6-6 6-6" stroke="#F0502D" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const HomeIconSvg = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 11l9-8 9 8" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
 
@@ -26,6 +33,18 @@ const ChevronRightSvg = () => (
   </Svg>
 );
 
+const ChevronDownSvg = ({ aberto }: { aberto: boolean }) => (
+  <Svg
+    width={18}
+    height={18}
+    viewBox="0 0 24 24"
+    fill="none"
+    style={{ transform: [{ rotate: aberto ? '180deg' : '0deg' }] }}
+  >
+    <Path d="M6 9l6 6 6-6" stroke="#F0502D" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 const FolderIconSvg = () => (
   <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
     <Path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -36,6 +55,7 @@ const FolderIconSvg = () => (
 interface AtividadeEvento {
   uuid: string;
   titulo: string;
+  sobre: string | null;
   data_inicio: string;
   status: string | null;
   imagem_url: string | null;
@@ -70,6 +90,7 @@ export default function EventosScreen() {
 
   const [atividades, setAtividades] = useState<AtividadeEvento[]>([]);
   const [carregandoAtividades, setCarregandoAtividades] = useState(true);
+  const [expandidoUuid, setExpandidoUuid] = useState<string | null>(null);
 
   useEffect(() => {
     verificarSessao();
@@ -90,7 +111,7 @@ export default function EventosScreen() {
     setCarregandoAtividades(true);
     const { data, error } = await supabase
       .from('atividade')
-      .select('uuid, titulo, data_inicio, status, imagem_url, projeto:projeto_uuid(titulo)')
+      .select('uuid, titulo, sobre, data_inicio, status, imagem_url, projeto:projeto_uuid(titulo)')
       .not('data_inicio', 'is', null)
       .order('data_inicio', { ascending: true });
 
@@ -108,6 +129,10 @@ export default function EventosScreen() {
     } else {
       router.replace('/');
     }
+  };
+
+  const irParaHome = () => {
+    router.push('/');
   };
 
   const irParaMesAnterior = () => {
@@ -176,6 +201,10 @@ export default function EventosScreen() {
     }
   });
 
+  const toggleExpandido = (uuid: string) => {
+    setExpandidoUuid((atual) => (atual === uuid ? null : uuid));
+  };
+
   if (carregandoSessao) {
     return (
       <View style={[styles.container, styles.center]}>
@@ -192,6 +221,9 @@ export default function EventosScreen() {
             <TouchableOpacity onPress={voltar} style={styles.backButton}>
               <BackIconSvg />
               <Text style={styles.backButtonText}>Voltar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={irParaHome} style={styles.homeBtn}>
+              <HomeIconSvg />
             </TouchableOpacity>
           </View>
           <View style={styles.lockedContainer}>
@@ -216,6 +248,9 @@ export default function EventosScreen() {
             <TouchableOpacity onPress={voltar} style={styles.backButton}>
               <BackIconSvg />
               <Text style={styles.backButtonText}>Voltar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={irParaHome} style={styles.homeBtn}>
+              <HomeIconSvg />
             </TouchableOpacity>
           </View>
 
@@ -249,19 +284,19 @@ export default function EventosScreen() {
                 {semanas.map((semana, index) => (
                   <View key={index} style={styles.calendarWeekRow}>
                     {semana.map((dia, i) => {
-                      const hoje = ehHoje(dia);
+                      const hojeAtual = ehHoje(dia);
                       const comEvento = dia !== null && diasComEvento.has(dia);
                       return (
                         <View
                           key={i}
                           style={[
                             styles.calendarDayCell,
-                            hoje && styles.calendarDayCellToday,
-                            !hoje && comEvento && styles.calendarDayCellEvento,
+                            hojeAtual && styles.calendarDayCellToday,
+                            !hojeAtual && comEvento && styles.calendarDayCellEvento,
                           ]}
                         >
                           {dia !== null && (
-                            <Text style={[styles.calendarDayText, hoje && styles.calendarDayTextToday]}>
+                            <Text style={[styles.calendarDayText, hojeAtual && styles.calendarDayTextToday]}>
                               {dia}
                             </Text>
                           )}
@@ -280,43 +315,60 @@ export default function EventosScreen() {
               ) : atividades.length > 0 ? (
                 <View style={styles.eventosLista}>
                   {atividades.map((atividade) => {
-                    const dataAtividade = new Date(atividade.data_inicio);
-                    const jaPassou = dataAtividade.getTime() < Date.now();
                     const concluida = atividade.status === 'Concluída';
+                    const expandido = expandidoUuid === atividade.uuid;
 
                     return (
-                      <View key={atividade.uuid} style={styles.eventoCard}>
-                        {atividade.imagem_url ? (
-                          <Image source={{ uri: atividade.imagem_url }} style={styles.eventoImagem} />
-                        ) : (
-                          <View style={styles.eventoImagemPlaceholder}>
-                            <FolderIconSvg />
+                      <TouchableOpacity
+                        key={atividade.uuid}
+                        style={styles.eventoCard}
+                        onPress={() => toggleExpandido(atividade.uuid)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={styles.eventoLinha}>
+                          {atividade.imagem_url ? (
+                            <Image source={{ uri: atividade.imagem_url }} style={styles.eventoImagem} resizeMode="cover" />
+                          ) : (
+                            <View style={styles.eventoImagemPlaceholder}>
+                              <FolderIconSvg />
+                            </View>
+                          )}
+
+                          <View style={styles.eventoConteudo}>
+                            <View
+                              style={[
+                                styles.eventoBadge,
+                                concluida ? styles.eventoBadgeConcluido : styles.eventoBadgeEmBreve,
+                              ]}
+                            >
+                              <Text style={styles.eventoBadgeText}>
+                                {concluida ? 'Concluído' : 'Em breve'}
+                              </Text>
+                            </View>
+
+                            <Text style={styles.eventoDataHora}>{formatarDataHora(atividade.data_inicio)}</Text>
+                            <Text style={styles.eventoTitulo}>{atividade.titulo}</Text>
+                            {atividade.projeto?.titulo ? (
+                              <Text style={styles.eventoLocal}>{atividade.projeto.titulo}</Text>
+                            ) : null}
+                          </View>
+
+                          <ChevronDownSvg aberto={expandido} />
+                        </View>
+
+                        {expandido && (
+                          <View style={styles.eventoExpandido}>
+                            {atividade.imagem_url && (
+                              <Image source={{ uri: atividade.imagem_url }} style={styles.eventoImagemGrande} resizeMode="cover" />
+                            )}
+                            {atividade.sobre ? (
+                              <Text style={styles.eventoSobre}>{atividade.sobre}</Text>
+                            ) : (
+                              <Text style={styles.eventoSobreVazio}>Nenhuma descrição adicionada para este evento.</Text>
+                            )}
                           </View>
                         )}
-
-                        <View style={styles.eventoConteudo}>
-                          <View
-                            style={[
-                              styles.eventoBadge,
-                              concluida
-                                ? styles.eventoBadgeConcluido
-                                : jaPassou
-                                ? styles.eventoBadgeAtrasado
-                                : styles.eventoBadgeEmBreve,
-                            ]}
-                          >
-                            <Text style={styles.eventoBadgeText}>
-                              {concluida ? 'Concluído' : jaPassou ? 'Atrasado' : 'Agendado'}
-                            </Text>
-                          </View>
-
-                          <Text style={styles.eventoDataHora}>{formatarDataHora(atividade.data_inicio)}</Text>
-                          <Text style={styles.eventoTitulo}>{atividade.titulo}</Text>
-                          {atividade.projeto?.titulo ? (
-                            <Text style={styles.eventoLocal}>{atividade.projeto.titulo}</Text>
-                          ) : null}
-                        </View>
-                      </View>
+                      </TouchableOpacity>
                     );
                   })}
                 </View>
@@ -341,9 +393,19 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#11121C' },
   center: { justifyContent: 'center', alignItems: 'center' },
   safeArea: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#2a2b3d' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#2a2b3d' },
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   backButtonText: { color: '#F0502D', fontSize: 16, fontWeight: '500' },
+  homeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1c1d2b',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+  },
   scrollContainer: { flexGrow: 1, paddingBottom: 40 },
 
   emptyText: { color: '#666', fontSize: 14, textAlign: 'center', lineHeight: 21 },
@@ -398,17 +460,20 @@ const styles = StyleSheet.create({
   eventosSection: { paddingHorizontal: 20, paddingTop: 10 },
   eventosLista: { gap: 16 },
   eventoCard: {
-    flexDirection: 'row',
     backgroundColor: '#1c1d2b',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#2a2b3d',
     overflow: 'hidden',
   },
-  eventoImagem: { width: 100, height: '100%', minHeight: 110 },
+  eventoLinha: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  eventoImagem: { width: 100, height: 110 },
   eventoImagemPlaceholder: {
     width: 100,
-    minHeight: 110,
+    height: 110,
     backgroundColor: '#2a2b3d',
     justifyContent: 'center',
     alignItems: 'center',
@@ -417,11 +482,20 @@ const styles = StyleSheet.create({
   eventoBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, marginBottom: 4 },
   eventoBadgeConcluido: { backgroundColor: '#2a2b3d' },
   eventoBadgeEmBreve: { backgroundColor: '#1c6fa8' },
-  eventoBadgeAtrasado: { backgroundColor: '#8a4a1c' },
   eventoBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: 'bold' },
   eventoDataHora: { color: '#F0502D', fontSize: 11, fontWeight: 'bold' },
   eventoTitulo: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
   eventoLocal: { color: '#666', fontSize: 11, marginTop: 4 },
+
+  eventoExpandido: {
+    borderTopWidth: 1,
+    borderTopColor: '#2a2b3d',
+    padding: 14,
+    gap: 12,
+  },
+  eventoImagemGrande: { width: '100%', height: 180, borderRadius: 10 },
+  eventoSobre: { color: '#CCCCCC', fontSize: 13, lineHeight: 20 },
+  eventoSobreVazio: { color: '#666', fontSize: 13, fontStyle: 'italic' },
 
   eventosEmptyState: {
     alignItems: 'center',
