@@ -33,21 +33,16 @@ const ChevronRightSvg = () => (
   </Svg>
 );
 
-const ChevronDownSvg = ({ aberto }: { aberto: boolean }) => (
-  <Svg
-    width={18}
-    height={18}
-    viewBox="0 0 24 24"
-    fill="none"
-    style={{ transform: [{ rotate: aberto ? '180deg' : '0deg' }] }}
-  >
-    <Path d="M6 9l6 6 6-6" stroke="#F0502D" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-
 const FolderIconSvg = () => (
   <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
     <Path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const TagIconSvg = () => (
+  <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
+    <Path d="M20.59 13.41L11 3.83A2 2 0 0 0 9.5 3H4a1 1 0 0 0-1 1v5.5a2 2 0 0 0 .59 1.41l9.58 9.58a2 2 0 0 0 2.83 0l5-5a2 2 0 0 0 0-2.83z" stroke="#F0502D" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    <Circle cx="7" cy="7.5" r="1" fill="#F0502D" />
   </Svg>
 );
 
@@ -90,7 +85,6 @@ export default function EventosScreen() {
 
   const [atividades, setAtividades] = useState<AtividadeEvento[]>([]);
   const [carregandoAtividades, setCarregandoAtividades] = useState(true);
-  const [expandidoUuid, setExpandidoUuid] = useState<string | null>(null);
 
   useEffect(() => {
     verificarSessao();
@@ -200,10 +194,6 @@ export default function EventosScreen() {
       diasComEvento.add(data.getDate());
     }
   });
-
-  const toggleExpandido = (uuid: string) => {
-    setExpandidoUuid((atual) => (atual === uuid ? null : uuid));
-  };
 
   if (carregandoSessao) {
     return (
@@ -316,16 +306,10 @@ export default function EventosScreen() {
                 <View style={styles.eventosLista}>
                   {atividades.map((atividade) => {
                     const concluida = atividade.status === 'Concluída';
-                    const expandido = expandidoUuid === atividade.uuid;
 
                     return (
-                      <TouchableOpacity
-                        key={atividade.uuid}
-                        style={styles.eventoCard}
-                        onPress={() => toggleExpandido(atividade.uuid)}
-                        activeOpacity={0.8}
-                      >
-                        <View style={styles.eventoLinha}>
+                      <View key={atividade.uuid} style={styles.eventoCard}>
+                        <View style={styles.eventoThumbWrapper}>
                           {atividade.imagem_url ? (
                             <Image source={{ uri: atividade.imagem_url }} style={styles.eventoImagem} resizeMode="cover" />
                           ) : (
@@ -333,42 +317,33 @@ export default function EventosScreen() {
                               <FolderIconSvg />
                             </View>
                           )}
-
-                          <View style={styles.eventoConteudo}>
-                            <View
-                              style={[
-                                styles.eventoBadge,
-                                concluida ? styles.eventoBadgeConcluido : styles.eventoBadgeEmBreve,
-                              ]}
-                            >
-                              <Text style={styles.eventoBadgeText}>
-                                {concluida ? 'Concluído' : 'Em breve'}
-                              </Text>
-                            </View>
-
-                            <Text style={styles.eventoDataHora}>{formatarDataHora(atividade.data_inicio)}</Text>
-                            <Text style={styles.eventoTitulo}>{atividade.titulo}</Text>
-                            {atividade.projeto?.titulo ? (
-                              <Text style={styles.eventoLocal}>{atividade.projeto.titulo}</Text>
-                            ) : null}
+                          <View
+                            style={[
+                              styles.eventoBadge,
+                              concluida ? styles.eventoBadgeConcluido : styles.eventoBadgeEmBreve,
+                            ]}
+                          >
+                            <Text style={styles.eventoBadgeText}>
+                              {concluida ? 'Concluído' : 'Em breve'}
+                            </Text>
                           </View>
-
-                          <ChevronDownSvg aberto={expandido} />
                         </View>
 
-                        {expandido && (
-                          <View style={styles.eventoExpandido}>
-                            {atividade.imagem_url && (
-                              <Image source={{ uri: atividade.imagem_url }} style={styles.eventoImagemGrande} resizeMode="cover" />
-                            )}
-                            {atividade.sobre ? (
-                              <Text style={styles.eventoSobre}>{atividade.sobre}</Text>
-                            ) : (
-                              <Text style={styles.eventoSobreVazio}>Nenhuma descrição adicionada para este evento.</Text>
-                            )}
-                          </View>
-                        )}
-                      </TouchableOpacity>
+                        <View style={styles.eventoConteudo}>
+                          <Text style={styles.eventoDataHora}>{formatarDataHora(atividade.data_inicio)}</Text>
+                          <Text style={styles.eventoTitulo}>{atividade.titulo}</Text>
+                          {atividade.sobre ? (
+                            <Text style={styles.eventoSobre}>{atividade.sobre}</Text>
+                          ) : null}
+
+                          {atividade.projeto?.titulo ? (
+                            <View style={styles.eventoMetaRow}>
+                              <TagIconSvg />
+                              <Text style={styles.eventoMetaText}>{atividade.projeto.titulo}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      </View>
                     );
                   })}
                 </View>
@@ -456,46 +431,44 @@ const styles = StyleSheet.create({
   calendarDayText: { color: '#CCCCCC', fontSize: 12 },
   calendarDayTextToday: { color: '#FFFFFF', fontWeight: 'bold' },
 
-  // --- LISTA DE EVENTOS ---
+  // --- LISTA DE EVENTOS (estilo aproximado do site antigo) ---
   eventosSection: { paddingHorizontal: 20, paddingTop: 10 },
-  eventosLista: { gap: 16 },
+  eventosLista: { gap: 18 },
   eventoCard: {
+    flexDirection: 'row',
     backgroundColor: '#1c1d2b',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#2a2b3d',
     overflow: 'hidden',
   },
-  eventoLinha: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  eventoImagem: { width: 100, height: 110 },
+  eventoThumbWrapper: { width: 120, position: 'relative' },
+  eventoImagem: { width: '100%', height: '100%', minHeight: 130 },
   eventoImagemPlaceholder: {
-    width: 100,
-    height: 110,
+    width: '100%',
+    height: '100%',
+    minHeight: 130,
     backgroundColor: '#2a2b3d',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  eventoConteudo: { flex: 1, padding: 14, gap: 4 },
-  eventoBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, marginBottom: 4 },
-  eventoBadgeConcluido: { backgroundColor: '#2a2b3d' },
-  eventoBadgeEmBreve: { backgroundColor: '#1c6fa8' },
-  eventoBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: 'bold' },
-  eventoDataHora: { color: '#F0502D', fontSize: 11, fontWeight: 'bold' },
-  eventoTitulo: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
-  eventoLocal: { color: '#666', fontSize: 11, marginTop: 4 },
-
-  eventoExpandido: {
-    borderTopWidth: 1,
-    borderTopColor: '#2a2b3d',
-    padding: 14,
-    gap: 12,
+  eventoBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
   },
-  eventoImagemGrande: { width: '100%', height: 180, borderRadius: 10 },
-  eventoSobre: { color: '#CCCCCC', fontSize: 13, lineHeight: 20 },
-  eventoSobreVazio: { color: '#666', fontSize: 13, fontStyle: 'italic' },
+  eventoBadgeConcluido: { backgroundColor: 'rgba(42,43,61,0.9)' },
+  eventoBadgeEmBreve: { backgroundColor: 'rgba(28,111,168,0.9)' },
+  eventoBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: 'bold' },
+  eventoConteudo: { flex: 1, padding: 14, gap: 4 },
+  eventoDataHora: { color: '#F0502D', fontSize: 11, fontWeight: 'bold' },
+  eventoTitulo: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  eventoSobre: { color: '#AAAAAA', fontSize: 12, lineHeight: 18, marginTop: 2 },
+  eventoMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  eventoMetaText: { color: '#888', fontSize: 11 },
 
   eventosEmptyState: {
     alignItems: 'center',

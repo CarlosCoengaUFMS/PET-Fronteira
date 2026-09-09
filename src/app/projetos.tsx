@@ -206,6 +206,13 @@ const formatarHoraInput = (texto: string) => {
   return numeros;
 };
 
+// Deriva uma extensão de arquivo a partir do mimeType, com fallback seguro
+const extensaoDoMime = (mime: string | null | undefined) => {
+  if (!mime) return 'jpg';
+  const partes = mime.split('/');
+  return partes[1] || 'jpg';
+};
+
 export default function ProjetosScreen() {
   const params = useLocalSearchParams<{ projeto?: string; ano?: string }>();
 
@@ -230,7 +237,7 @@ export default function ProjetosScreen() {
   const [formNovoProjetoVisivel, setFormNovoProjetoVisivel] = useState(false);
   const [novoTitulo, setNovoTitulo] = useState('');
   const [novaDescricao, setNovaDescricao] = useState('');
-  const [novaImagemLocal, setNovaImagemLocal] = useState<string | null>(null);
+  const [novaImagemLocal, setNovaImagemLocal] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [enviandoProjeto, setEnviandoProjeto] = useState(false);
 
   const [petianosDisponiveis, setPetianosDisponiveis] = useState<PetianoSimples[]>([]);
@@ -241,7 +248,7 @@ export default function ProjetosScreen() {
   const [atividadeSobre, setAtividadeSobre] = useState('');
   const [atividadeData, setAtividadeData] = useState('');
   const [atividadeHora, setAtividadeHora] = useState('');
-  const [novaImagemAtividadeLocal, setNovaImagemAtividadeLocal] = useState<string | null>(null);
+  const [novaImagemAtividadeLocal, setNovaImagemAtividadeLocal] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [enviandoAtividade, setEnviandoAtividade] = useState(false);
 
   const [atividadeReagendandoUuid, setAtividadeReagendandoUuid] = useState<string | null>(null);
@@ -348,6 +355,10 @@ export default function ProjetosScreen() {
     router.push('/');
   };
 
+  // IMPORTANTE: allowsEditing fica DESLIGADO de propósito. A tela de corte
+  // do ImagePicker (principalmente na web) reprocessa a imagem via canvas e
+  // reexporta em JPEG comprimido, causando perda de qualidade visível.
+  // Sem o corte, o arquivo original é enviado exatamente como foi escolhido.
   const escolherImagemProjeto = async () => {
     const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissao.granted) {
@@ -357,13 +368,12 @@ export default function ProjetosScreen() {
 
     const resultado = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [16, 9],
+      allowsEditing: false,
       quality: 1,
     });
 
     if (!resultado.canceled) {
-      setNovaImagemLocal(resultado.assets[0].uri);
+      setNovaImagemLocal(resultado.assets[0]);
     }
   };
 
@@ -376,13 +386,12 @@ export default function ProjetosScreen() {
 
     const resultado = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [16, 9],
+      allowsEditing: false,
       quality: 1,
     });
 
     if (!resultado.canceled) {
-      setNovaImagemAtividadeLocal(resultado.assets[0].uri);
+      setNovaImagemAtividadeLocal(resultado.assets[0]);
     }
   };
 
@@ -404,13 +413,14 @@ export default function ProjetosScreen() {
       let imagemUrl: string | null = null;
 
       if (novaImagemLocal) {
-        const resposta = await fetch(novaImagemLocal);
+        const resposta = await fetch(novaImagemLocal.uri);
         const blob = await resposta.blob();
-        const caminho = `${usuarioId}/${Date.now()}.jpg`;
+        const extensao = extensaoDoMime(novaImagemLocal.mimeType);
+        const caminho = `${usuarioId}/${Date.now()}.${extensao}`;
 
         const { error: erroUpload } = await supabase.storage
           .from('projetos')
-          .upload(caminho, blob, { contentType: 'image/jpeg' });
+          .upload(caminho, blob, { contentType: novaImagemLocal.mimeType || 'image/jpeg' });
 
         if (erroUpload) {
           throw new Error('Falha ao enviar a imagem. Verifique se o bucket "projetos" foi criado como Public.');
@@ -546,13 +556,14 @@ export default function ProjetosScreen() {
       let imagemUrl: string | null = null;
 
       if (novaImagemAtividadeLocal) {
-        const resposta = await fetch(novaImagemAtividadeLocal);
+        const resposta = await fetch(novaImagemAtividadeLocal.uri);
         const blob = await resposta.blob();
-        const caminho = `${projetoSelecionado.uuid}/${Date.now()}.jpg`;
+        const extensao = extensaoDoMime(novaImagemAtividadeLocal.mimeType);
+        const caminho = `${projetoSelecionado.uuid}/${Date.now()}.${extensao}`;
 
         const { error: erroUpload } = await supabase.storage
           .from('atividades')
-          .upload(caminho, blob, { contentType: 'image/jpeg' });
+          .upload(caminho, blob, { contentType: novaImagemAtividadeLocal.mimeType || 'image/jpeg' });
 
         if (!erroUpload) {
           const { data: urlData } = supabase.storage.from('atividades').getPublicUrl(caminho);
@@ -965,7 +976,7 @@ export default function ProjetosScreen() {
 
                     <TouchableOpacity style={styles.imagemPickerBtn} onPress={escolherImagemProjeto}>
                       {novaImagemLocal ? (
-                        <Image source={{ uri: novaImagemLocal }} style={styles.imagemPreview} resizeMode="cover" />
+                        <Image source={{ uri: novaImagemLocal.uri }} style={styles.imagemPreview} resizeMode="cover" />
                       ) : (
                         <View style={styles.imagemPickerPlaceholder}>
                           <ImageIconSvg />
@@ -1151,7 +1162,7 @@ export default function ProjetosScreen() {
 
                         <TouchableOpacity style={styles.imagemPickerBtn} onPress={escolherImagemAtividade}>
                           {novaImagemAtividadeLocal ? (
-                            <Image source={{ uri: novaImagemAtividadeLocal }} style={styles.imagemPreview} resizeMode="cover" />
+                            <Image source={{ uri: novaImagemAtividadeLocal.uri }} style={styles.imagemPreview} resizeMode="cover" />
                           ) : (
                             <View style={styles.imagemPickerPlaceholder}>
                               <ImageIconSvg />
