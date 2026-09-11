@@ -85,6 +85,14 @@ interface Relatorio {
   created_at: string;
 }
 
+type Visibilidade = 'publico' | 'petianos' | 'tutor';
+
+const OPCOES_VISIBILIDADE: { valor: Visibilidade; label: string }[] = [
+  { valor: 'publico', label: 'Todo mundo (mesmo sem login)' },
+  { valor: 'petianos', label: 'Apenas petianos logados' },
+  { valor: 'tutor', label: 'Apenas o Tutor' },
+];
+
 const formatarDataHora = (iso: string) => {
   const data = new Date(iso);
   return data.toLocaleString('pt-BR', {
@@ -112,6 +120,11 @@ export default function RelatoriosScreen() {
   const [carregandoSessao, setCarregandoSessao] = useState(true);
   const [logado, setLogado] = useState(false);
   const [usuarioId, setUsuarioId] = useState<string | null>(null);
+  const [souTutor, setSouTutor] = useState(false);
+
+  const [visibilidade, setVisibilidade] = useState<Visibilidade>('petianos');
+  const [carregandoConfig, setCarregandoConfig] = useState(true);
+  const [salvandoVisibilidade, setSalvandoVisibilidade] = useState(false);
 
   const [petianos, setPetianos] = useState<Petiano[]>([]);
   const [carregandoPetianos, setCarregandoPetianos] = useState(true);
@@ -123,6 +136,7 @@ export default function RelatoriosScreen() {
 
   useEffect(() => {
     verificarSessao();
+    buscarConfigVisibilidade();
   }, []);
 
   const verificarSessao = async () => {
@@ -130,12 +144,59 @@ export default function RelatoriosScreen() {
     if (session?.user) {
       setLogado(true);
       setUsuarioId(session.user.id);
-      buscarPetianos();
+
+      const { data: petiano } = await supabase
+        .from('petianos')
+        .select('cargo')
+        .eq('id', session.user.id)
+        .single();
+
+      setSouTutor(petiano?.cargo === 'Tutor');
     } else {
       setLogado(false);
     }
     setCarregandoSessao(false);
   };
+
+  const buscarConfigVisibilidade = async () => {
+    setCarregandoConfig(true);
+    const { data, error } = await supabase
+      .from('configuracoes_relatorios')
+      .select('visibilidade')
+      .single();
+
+    if (!error && data) {
+      setVisibilidade(data.visibilidade as Visibilidade);
+    } else if (error) {
+      console.error('Erro ao buscar configuração de visibilidade:', error);
+    }
+    setCarregandoConfig(false);
+  };
+
+  const alterarVisibilidade = async (novaVisibilidade: Visibilidade) => {
+    setSalvandoVisibilidade(true);
+    const { error } = await supabase
+      .from('configuracoes_relatorios')
+      .update({ visibilidade: novaVisibilidade, atualizado_em: new Date().toISOString() })
+      .not('id', 'is', null);
+
+    if (error) {
+      console.error('Erro ao salvar visibilidade:', error);
+      Alert.alert('Erro', 'Não foi possível salvar essa configuração.');
+    } else {
+      setVisibilidade(novaVisibilidade);
+    }
+    setSalvandoVisibilidade(false);
+  };
+
+  // Depende da configuração + de quem está olhando
+  const podeVer = souTutor || visibilidade === 'publico' || (visibilidade === 'petianos' && logado);
+
+  useEffect(() => {
+    if (!carregandoSessao && !carregandoConfig && podeVer) {
+      buscarPetianos();
+    }
+  }, [carregandoSessao, carregandoConfig, podeVer]);
 
   const buscarPetianos = async () => {
     setCarregandoPetianos(true);
@@ -175,8 +236,6 @@ export default function RelatoriosScreen() {
     setRelatorios([]);
   };
 
-  // Evita o erro "GO_BACK was not handled" quando a tela é aberta
-  // sem nenhuma tela anterior na pilha de navegação.
   const voltar = () => {
     if (router.canGoBack()) {
       router.back();
@@ -298,7 +357,7 @@ export default function RelatoriosScreen() {
     });
   };
 
-  if (carregandoSessao) {
+  if (carregandoSessao || carregandoConfig) {
     return (
       <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color="#F0502D" />
@@ -306,7 +365,12 @@ export default function RelatoriosScreen() {
     );
   }
 
-  if (!logado) {
+  if (!podeVer) {
+    const mensagem =
+      visibilidade === 'tutor'
+        ? 'No momento, apenas o Tutor pode ver os relatórios dos petianos.'
+        : 'Você precisa estar logado para ver os relatórios dos petianos.';
+
     return (
       <ThemedView style={styles.container}>
         <SafeAreaView style={styles.safeArea}>
@@ -323,10 +387,12 @@ export default function RelatoriosScreen() {
           <View style={styles.lockedContainer}>
             <LockIconSvg />
             <Text style={styles.lockedTitle}>Área restrita</Text>
-            <Text style={styles.lockedText}>Você precisa estar logado para ver os relatórios dos petianos.</Text>
-            <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/login')}>
-              <Text style={styles.loginBtnText}>Fazer Login</Text>
-            </TouchableOpacity>
+            <Text style={styles.lockedText}>{mensagem}</Text>
+            {!logado && (
+              <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/login')}>
+                <Text style={styles.loginBtnText}>Fazer Login</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </SafeAreaView>
       </ThemedView>
@@ -364,6 +430,35 @@ export default function RelatoriosScreen() {
                   </Text>
                   <Text style={styles.subtitle}>Escolha um petiano para ver os relatórios enviados</Text>
                 </View>
+
+                {/* --- CONFIGURAÇÃO DE VISIBILIDADE (só o Tutor vê) --- */}
+                {souTutor && (
+                  <View style={styles.configBox}>
+                    <Text style={styles.configTitulo}>Quem pode ver os relatórios?</Text>
+                    <View style={styles.configOpcoes}>
+                      {OPCOES_VISIBILIDADE.map((opcao) => (
+                        <TouchableOpacity
+                          key={opcao.valor}
+                          style={[
+                            styles.configChip,
+                            visibilidade === opcao.valor && styles.configChipAtivo,
+                          ]}
+                          onPress={() => alterarVisibilidade(opcao.valor)}
+                          disabled={salvandoVisibilidade}
+                        >
+                          <Text
+                            style={[
+                              styles.configChipText,
+                              visibilidade === opcao.valor && styles.configChipTextAtivo,
+                            ]}
+                          >
+                            {opcao.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
 
                 {carregandoPetianos ? (
                   <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 30 }} />
@@ -493,11 +588,33 @@ const styles = StyleSheet.create({
   },
   scrollContainer: { flexGrow: 1, padding: 20 },
 
-  titleSection: { alignItems: 'center', marginBottom: 30 },
+  titleSection: { alignItems: 'center', marginBottom: 24 },
   title: { color: '#FFFFFF', fontSize: 26, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
   orangeHighlight: { color: '#F0502D' },
   subtitle: { color: '#AAAAAA', fontSize: 15, textAlign: 'center' },
   emptyText: { color: '#666', fontSize: 14, textAlign: 'center', marginTop: 20 },
+
+  configBox: {
+    backgroundColor: '#1c1d2b',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    padding: 16,
+    marginBottom: 30,
+  },
+  configTitulo: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold', marginBottom: 12 },
+  configOpcoes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  configChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    backgroundColor: '#11121C',
+  },
+  configChipAtivo: { backgroundColor: '#F0502D', borderColor: '#F0502D' },
+  configChipText: { color: '#AAAAAA', fontSize: 12, fontWeight: '600' },
+  configChipTextAtivo: { color: '#FFFFFF' },
 
   grupoSection: { marginBottom: 32 },
   grupoTitulo: {

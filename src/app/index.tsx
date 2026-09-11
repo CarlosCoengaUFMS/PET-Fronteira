@@ -270,17 +270,13 @@ interface Petiano {
   sobre: string | null;
 }
 
-// --- TIPO: PROJETO (preparado para vir do banco futuramente) ---
+// --- TIPO: PROJETO (agora vindo de verdade da tabela "projeto") ---
 interface Projeto {
-  id: string;
-  nome: string;
-  descricao: string;
+  uuid: string;
+  titulo: string;
+  descricao: string | null;
   imagem_url: string | null;
 }
-
-// Array vazio de propósito — quando a tabela "projeto" estiver com dados,
-// troque isso por uma busca real (igual foi feito com petianos).
-const PROJETOS_ATUAIS: Projeto[] = [];
 
 // --- LINKS: NORMAS E MANUAIS ---
 const LINK_NORMAS = 'https://prograd.ufms.br/files/2021/08/IN_53-Normas-Programa-Educacao-Tutorial-PET.pdf';
@@ -335,6 +331,8 @@ const ESTATISTICAS: Estatistica[] = [
 ];
 
 export default function HomeScreen() {
+  const anoAtual = new Date().getFullYear();
+
   const [menuAberto, setMenuAberto] = useState(false);
   const [userMenuAberto, setUserMenuAberto] = useState(false);
 
@@ -366,6 +364,10 @@ export default function HomeScreen() {
   const [membros, setMembros] = useState<Petiano[]>([]);
   const [carregandoPerfis, setCarregandoPerfis] = useState(true);
 
+  // --- ESTADO: PROJETOS EM ANDAMENTO (do ano atual) ---
+  const [projetosAtuais, setProjetosAtuais] = useState<Projeto[]>([]);
+  const [carregandoProjetosAtuais, setCarregandoProjetosAtuais] = useState(true);
+
   // --- ESTADO: FAQ (qual pergunta está expandida) ---
   const [duvidaAberta, setDuvidaAberta] = useState<number | null>(null);
 
@@ -383,6 +385,7 @@ export default function HomeScreen() {
     });
 
     buscarPetianos();
+    buscarProjetosAtuais();
 
     return () => subscription.unsubscribe();
   }, []);
@@ -399,6 +402,33 @@ export default function HomeScreen() {
       console.error('Erro ao buscar petianos:', error);
     }
     setCarregandoPerfis(false);
+  };
+
+  // Sempre busca os projetos do ano ATUAL (calculado na hora, nunca fixo em 2026)
+  const buscarProjetosAtuais = async () => {
+    setCarregandoProjetosAtuais(true);
+    const anoDeAgora = new Date().getFullYear();
+
+    const { data, error } = await supabase
+      .from('projeto')
+      .select('uuid, titulo, descricao, imagem_url')
+      .eq('ano', anoDeAgora)
+      .order('created', { ascending: true })
+      .limit(4);
+
+    if (!error && data) {
+      setProjetosAtuais(data as Projeto[]);
+    } else if (error) {
+      console.error('Erro ao buscar projetos atuais:', error);
+    }
+    setCarregandoProjetosAtuais(false);
+  };
+
+  const abrirProjetoAtual = (projeto: Projeto) => {
+    router.push({
+      pathname: '/projetos',
+      params: { projeto: projeto.uuid, ano: String(anoAtual) },
+    });
   };
 
   const atualizarDadosDoUsuario = (session: any) => {
@@ -834,33 +864,49 @@ export default function HomeScreen() {
             </View>
 
             {/* --- SEÇÃO: PROJETOS ATUAIS EM ANDAMENTO --- */}
-            {/* Preparado para buscar do Supabase (tabela "projeto") quando ela tiver dados. */}
+            {/* Sempre puxa os projetos do ano ATUAL (calculado dinamicamente), nunca fixo em 2026 */}
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>
                 Projetos Atuais em Andamento<Text style={styles.orangeHighlight}>.</Text>
               </Text>
-              <Text style={styles.sectionSubtitle}>Conheça as principais iniciativas do PET em execução.</Text>
+              <Text style={styles.sectionSubtitle}>Conheça as principais iniciativas do PET em execução em {anoAtual}.</Text>
 
-              {PROJETOS_ATUAIS.length > 0 ? (
-                <View style={styles.projetosGrid}>
-                  {PROJETOS_ATUAIS.map((projeto) => (
-                    <View key={projeto.id} style={styles.projetoCard}>
-                      {projeto.imagem_url ? (
-                        <Image source={{ uri: projeto.imagem_url }} style={styles.projetoImagem} />
-                      ) : (
-                        <View style={styles.projetoImagemPlaceholder}>
-                          <FolderIconSvg />
-                        </View>
-                      )}
-                      <Text style={styles.projetoNome}>{projeto.nome}</Text>
-                      <Text style={styles.projetoDesc}>{projeto.descricao}</Text>
-                    </View>
-                  ))}
-                </View>
+              {carregandoProjetosAtuais ? (
+                <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 20 }} />
+              ) : projetosAtuais.length > 0 ? (
+                <>
+                  <View style={styles.projetosGrid}>
+                    {projetosAtuais.map((projeto) => (
+                      <TouchableOpacity
+                        key={projeto.uuid}
+                        style={styles.projetoCard}
+                        onPress={() => abrirProjetoAtual(projeto)}
+                      >
+                        {projeto.imagem_url ? (
+                          <Image source={{ uri: projeto.imagem_url }} style={styles.projetoImagem} resizeMode="cover" />
+                        ) : (
+                          <View style={styles.projetoImagemPlaceholder}>
+                            <FolderIconSvg />
+                          </View>
+                        )}
+                        <Text style={styles.projetoNome}>{projeto.titulo}</Text>
+                        {projeto.descricao ? (
+                          <Text style={styles.projetoDesc} numberOfLines={3}>{projeto.descricao}</Text>
+                        ) : null}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Link href="/projetos" asChild>
+                    <TouchableOpacity style={StyleSheet.flatten([styles.btnSecondary, { marginTop: 24 }])}>
+                      <Text style={styles.btnSecondaryText}>Ver todos os projetos</Text>
+                    </TouchableOpacity>
+                  </Link>
+                </>
               ) : (
                 <View style={styles.projetosEmptyState}>
                   <FolderIconSvg />
-                  <Text style={styles.emptyText}>Em breve, os projetos em andamento aparecerão aqui.</Text>
+                  <Text style={styles.emptyText}>Nenhum projeto cadastrado para {anoAtual} ainda.</Text>
                   <Link href="/projetos" asChild>
                     <TouchableOpacity style={styles.btnSecondary}>
                       <Text style={styles.btnSecondaryText}>Ver página de Projetos</Text>
@@ -973,7 +1019,7 @@ export default function HomeScreen() {
                   <Text style={styles.footerText}>UFMS Universidade Federal de Mato Grosso do Sul</Text>
                   <Text style={styles.footerText}>Campus de Ponta Porã</Text>
 
-                  
+
                 </View>
 
                 <View style={styles.footerSection}>
@@ -1020,7 +1066,7 @@ export default function HomeScreen() {
                     >
                       <FacebookIconSvg size={22} />
                     </TouchableOpacity>
-                    
+
 
                     {/* Instagram */}
                     <TouchableOpacity
@@ -1030,9 +1076,9 @@ export default function HomeScreen() {
                       <InstagramIconSvg size={22} />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.footerPhoneRow} onPress={() => abrirLink(TELEFONE_LINK)}>
-                    <PhoneIconSvg size={14} />
-                    <Text style={styles.footerPhoneText}>{TELEFONE_DISPLAY}</Text>
-                  </TouchableOpacity>
+                      <PhoneIconSvg size={14} />
+                      <Text style={styles.footerPhoneText}>{TELEFONE_DISPLAY}</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               </View>
