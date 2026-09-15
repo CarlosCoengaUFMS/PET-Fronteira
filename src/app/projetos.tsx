@@ -61,6 +61,19 @@ const CrownIconSvg = () => (
   </Svg>
 );
 
+const StarIconSvg = () => (
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 2l3.09 6.26 6.91 1L17 14.14l1.18 6.86L12 17.77l-6.18 3.23L7 14.14 2 9.26l6.91-1z"
+      stroke="#1c6fa8"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="rgba(28,111,168,0.15)"
+    />
+  </Svg>
+);
+
 const CloseIconSvg = () => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path d="M18 6L6 18M6 6L18 18" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -211,6 +224,13 @@ const extensaoDoMime = (mime: string | null | undefined) => {
   if (!mime) return 'jpg';
   const partes = mime.split('/');
   return partes[1] || 'jpg';
+};
+
+// Ordena Integrantes: Tutor sempre primeiro, depois líderes, depois membros comuns
+const pesoDoTipo = (tipo: string) => {
+  if (tipo === 'tutor') return 0;
+  if (tipo === 'lider') return 1;
+  return 2;
 };
 
 export default function ProjetosScreen() {
@@ -443,6 +463,16 @@ export default function ProjetosScreen() {
 
       if (error) throw error;
 
+      // O Tutor (quem está criando, já que só ele pode) SEMPRE entra
+      // automaticamente no projeto, obrigatoriamente
+      if (usuarioId) {
+        await supabase.from('petianos_has_projeto').insert({
+          petiano_id: usuarioId,
+          projeto_uuid: novo.uuid,
+          tipo_responsavel: 'tutor',
+        });
+      }
+
       if (lideresSelecionados.length > 0) {
         const linhas = lideresSelecionados.map((petianoId) => ({
           petiano_id: petianoId,
@@ -499,6 +529,10 @@ export default function ProjetosScreen() {
 
   const souMembro = membros.some((m) => m.petiano_id === usuarioId);
   const souLider = membros.some((m) => m.petiano_id === usuarioId && m.tipo_responsavel === 'lider');
+
+  const membrosOrdenados = [...membros].sort(
+    (a, b) => pesoDoTipo(a.tipo_responsavel) - pesoDoTipo(b.tipo_responsavel)
+  );
 
   const participarProjeto = async () => {
     if (!projetoSelecionado || !usuarioId) return;
@@ -1008,6 +1042,8 @@ export default function ProjetosScreen() {
                       })}
                     </View>
 
+                    <Text style={styles.avisoTutorAuto}>O Tutor entra automaticamente em todo projeto criado.</Text>
+
                     <TouchableOpacity
                       style={[styles.salvarProjetoBtn, enviandoProjeto && styles.uploadBtnDisabled]}
                       onPress={criarProjeto}
@@ -1075,23 +1111,27 @@ export default function ProjetosScreen() {
                   <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 20 }} />
                 ) : (
                   <>
-                    {!logado ? (
-                      <TouchableOpacity style={styles.participarBtn} onPress={() => router.push('/login')}>
-                        <Text style={styles.participarBtnText}>Faça login para participar</Text>
-                      </TouchableOpacity>
-                    ) : !souMembro ? (
-                      <TouchableOpacity style={styles.participarBtn} onPress={participarProjeto}>
-                        <Text style={styles.participarBtnText}>Fazer parte do projeto</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity style={styles.sairBtn} onPress={sairDoProjeto}>
-                        <Text style={styles.sairBtnText}>Sair do projeto</Text>
-                      </TouchableOpacity>
+                    {/* O Tutor está em todo projeto automaticamente — não faz sentido
+                        entrar/sair via botão, então esse bloco fica escondido pra ele */}
+                    {!souTutor && (
+                      !logado ? (
+                        <TouchableOpacity style={styles.participarBtn} onPress={() => router.push('/login')}>
+                          <Text style={styles.participarBtnText}>Faça login para participar</Text>
+                        </TouchableOpacity>
+                      ) : !souMembro ? (
+                        <TouchableOpacity style={styles.participarBtn} onPress={participarProjeto}>
+                          <Text style={styles.participarBtnText}>Fazer parte do projeto</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity style={styles.sairBtn} onPress={sairDoProjeto}>
+                          <Text style={styles.sairBtnText}>Sair do projeto</Text>
+                        </TouchableOpacity>
+                      )
                     )}
 
                     <Text style={styles.secaoTitulo}>Integrantes</Text>
                     <View style={styles.membrosGrid}>
-                      {membros.map((membro) => (
+                      {membrosOrdenados.map((membro) => (
                         <View key={membro.petiano_id} style={styles.membroCard}>
                           {membro.petianos?.avatar_url ? (
                             <Image source={{ uri: membro.petianos.avatar_url }} style={styles.membroAvatar} />
@@ -1099,6 +1139,12 @@ export default function ProjetosScreen() {
                             <UserIconSvg size={44} />
                           )}
                           <Text style={styles.membroNome} numberOfLines={1}>{membro.petianos?.nome}</Text>
+                          {membro.tipo_responsavel === 'tutor' && (
+                            <View style={styles.tutorBadge}>
+                              <StarIconSvg />
+                              <Text style={styles.tutorBadgeText}>Tutor</Text>
+                            </View>
+                          )}
                           {membro.tipo_responsavel === 'lider' && (
                             <View style={styles.liderBadge}>
                               <CrownIconSvg />
@@ -1309,6 +1355,8 @@ const styles = StyleSheet.create({
   liderChipText: { color: '#AAAAAA', fontSize: 12 },
   liderChipTextAtivo: { color: '#F0502D', fontWeight: 'bold' },
 
+  avisoTutorAuto: { color: '#666', fontSize: 11, fontStyle: 'italic' },
+
   salvarProjetoBtn: { backgroundColor: '#F0502D', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
   salvarProjetoBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
 
@@ -1338,6 +1386,8 @@ const styles = StyleSheet.create({
   membroNome: { color: '#FFFFFF', fontSize: 12, fontWeight: '600', textAlign: 'center', marginTop: 8 },
   liderBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
   liderBadgeText: { color: '#F0502D', fontSize: 10, fontWeight: 'bold' },
+  tutorBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
+  tutorBadgeText: { color: '#1c6fa8', fontSize: 10, fontWeight: 'bold' },
 
   atividadesHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   novaAtividadeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F0502D', justifyContent: 'center', alignItems: 'center' },

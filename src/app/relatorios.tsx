@@ -56,7 +56,7 @@ const UploadIconSvg = () => (
 );
 
 const LockIconSvg = () => (
-  <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
+  <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
     <Rect x="4" y="11" width="16" height="10" rx="2" stroke="#F0502D" strokeWidth="2" />
     <Path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" />
   </Svg>
@@ -70,11 +70,14 @@ const TrashIconSvg = () => (
 );
 
 // --- TIPOS ---
+type Visibilidade = 'publico' | 'petianos' | 'tutor';
+
 interface Petiano {
   id: string;
   nome: string;
   cargo: string;
   avatar_url: string | null;
+  visibilidade_relatorios: Visibilidade;
 }
 
 interface Relatorio {
@@ -84,8 +87,6 @@ interface Relatorio {
   arquivo_url: string;
   created_at: string;
 }
-
-type Visibilidade = 'publico' | 'petianos' | 'tutor';
 
 const OPCOES_VISIBILIDADE: { valor: Visibilidade; label: string }[] = [
   { valor: 'publico', label: 'Todo mundo (mesmo sem login)' },
@@ -104,8 +105,7 @@ const formatarDataHora = (iso: string) => {
   });
 };
 
-// Extrai o caminho do arquivo dentro do bucket a partir da URL pública,
-// necessário pra conseguir excluir o arquivo do Storage também.
+// Extrai o caminho do arquivo dentro do bucket a partir da URL pública
 const extrairCaminhoStorage = (url: string) => {
   const marcador = '/relatorios/';
   const indice = url.indexOf(marcador);
@@ -122,10 +122,6 @@ export default function RelatoriosScreen() {
   const [usuarioId, setUsuarioId] = useState<string | null>(null);
   const [souTutor, setSouTutor] = useState(false);
 
-  const [visibilidade, setVisibilidade] = useState<Visibilidade>('petianos');
-  const [carregandoConfig, setCarregandoConfig] = useState(true);
-  const [salvandoVisibilidade, setSalvandoVisibilidade] = useState(false);
-
   const [petianos, setPetianos] = useState<Petiano[]>([]);
   const [carregandoPetianos, setCarregandoPetianos] = useState(true);
 
@@ -133,10 +129,11 @@ export default function RelatoriosScreen() {
   const [relatorios, setRelatorios] = useState<Relatorio[]>([]);
   const [carregandoRelatorios, setCarregandoRelatorios] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [salvandoVisibilidade, setSalvandoVisibilidade] = useState(false);
 
   useEffect(() => {
     verificarSessao();
-    buscarConfigVisibilidade();
+    buscarPetianos();
   }, []);
 
   const verificarSessao = async () => {
@@ -158,51 +155,11 @@ export default function RelatoriosScreen() {
     setCarregandoSessao(false);
   };
 
-  const buscarConfigVisibilidade = async () => {
-    setCarregandoConfig(true);
-    const { data, error } = await supabase
-      .from('configuracoes_relatorios')
-      .select('visibilidade')
-      .single();
-
-    if (!error && data) {
-      setVisibilidade(data.visibilidade as Visibilidade);
-    } else if (error) {
-      console.error('Erro ao buscar configuração de visibilidade:', error);
-    }
-    setCarregandoConfig(false);
-  };
-
-  const alterarVisibilidade = async (novaVisibilidade: Visibilidade) => {
-    setSalvandoVisibilidade(true);
-    const { error } = await supabase
-      .from('configuracoes_relatorios')
-      .update({ visibilidade: novaVisibilidade, atualizado_em: new Date().toISOString() })
-      .not('id', 'is', null);
-
-    if (error) {
-      console.error('Erro ao salvar visibilidade:', error);
-      Alert.alert('Erro', 'Não foi possível salvar essa configuração.');
-    } else {
-      setVisibilidade(novaVisibilidade);
-    }
-    setSalvandoVisibilidade(false);
-  };
-
-  // Depende da configuração + de quem está olhando
-  const podeVer = souTutor || visibilidade === 'publico' || (visibilidade === 'petianos' && logado);
-
-  useEffect(() => {
-    if (!carregandoSessao && !carregandoConfig && podeVer) {
-      buscarPetianos();
-    }
-  }, [carregandoSessao, carregandoConfig, podeVer]);
-
   const buscarPetianos = async () => {
     setCarregandoPetianos(true);
     const { data, error } = await supabase
       .from('petianos')
-      .select('id, nome, cargo, avatar_url')
+      .select('id, nome, cargo, avatar_url, visibilidade_relatorios')
       .neq('cargo', 'Tutor');
 
     if (!error && data) {
@@ -213,8 +170,23 @@ export default function RelatoriosScreen() {
     setCarregandoPetianos(false);
   };
 
+  // Cada petiano tem sua própria visibilidade — o dono e o Tutor sempre veem
+  const podeVer = (petiano: Petiano) => {
+    if (souTutor) return true;
+    if (usuarioId === petiano.id) return true;
+    if (petiano.visibilidade_relatorios === 'publico') return true;
+    if (petiano.visibilidade_relatorios === 'petianos') return logado;
+    return false;
+  };
+
   const abrirPetiano = async (petiano: Petiano) => {
     setPetianoSelecionado(petiano);
+
+    if (!podeVer(petiano)) {
+      setRelatorios([]);
+      return;
+    }
+
     setCarregandoRelatorios(true);
 
     const { data, error } = await supabase
@@ -229,6 +201,31 @@ export default function RelatoriosScreen() {
       console.error('Erro ao buscar relatórios:', error);
     }
     setCarregandoRelatorios(false);
+  };
+
+  const alterarVisibilidadeDoPetiano = async (novoValor: Visibilidade) => {
+    if (!petianoSelecionado) return;
+    setSalvandoVisibilidade(true);
+
+    const { error } = await supabase
+      .from('petianos')
+      .update({ visibilidade_relatorios: novoValor })
+      .eq('id', petianoSelecionado.id);
+
+    if (error) {
+      console.error('Erro ao salvar visibilidade:', error);
+      Alert.alert('Erro', 'Não foi possível salvar essa configuração.');
+    } else {
+      const atualizado = { ...petianoSelecionado, visibilidade_relatorios: novoValor };
+      setPetianoSelecionado(atualizado);
+      setPetianos((atual) => atual.map((p) => (p.id === atualizado.id ? atualizado : p)));
+
+      // se acabou de ficar visível pro viewer atual, já carrega a lista
+      if (podeVer(atualizado) && relatorios.length === 0) {
+        abrirPetiano(atualizado);
+      }
+    }
+    setSalvandoVisibilidade(false);
   };
 
   const voltarParaLista = () => {
@@ -357,45 +354,11 @@ export default function RelatoriosScreen() {
     });
   };
 
-  if (carregandoSessao || carregandoConfig) {
+  if (carregandoSessao) {
     return (
       <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color="#F0502D" />
       </View>
-    );
-  }
-
-  if (!podeVer) {
-    const mensagem =
-      visibilidade === 'tutor'
-        ? 'No momento, apenas o Tutor pode ver os relatórios dos petianos.'
-        : 'Você precisa estar logado para ver os relatórios dos petianos.';
-
-    return (
-      <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={voltar} style={styles.backButton}>
-              <BackIconSvg />
-              <Text style={styles.backButtonText}>Voltar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={irParaHome} style={styles.homeBtn}>
-              <HomeIconSvg />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.lockedContainer}>
-            <LockIconSvg />
-            <Text style={styles.lockedTitle}>Área restrita</Text>
-            <Text style={styles.lockedText}>{mensagem}</Text>
-            {!logado && (
-              <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/login')}>
-                <Text style={styles.loginBtnText}>Fazer Login</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </SafeAreaView>
-      </ThemedView>
     );
   }
 
@@ -430,35 +393,6 @@ export default function RelatoriosScreen() {
                   </Text>
                   <Text style={styles.subtitle}>Escolha um petiano para ver os relatórios enviados</Text>
                 </View>
-
-                {/* --- CONFIGURAÇÃO DE VISIBILIDADE (só o Tutor vê) --- */}
-                {souTutor && (
-                  <View style={styles.configBox}>
-                    <Text style={styles.configTitulo}>Quem pode ver os relatórios?</Text>
-                    <View style={styles.configOpcoes}>
-                      {OPCOES_VISIBILIDADE.map((opcao) => (
-                        <TouchableOpacity
-                          key={opcao.valor}
-                          style={[
-                            styles.configChip,
-                            visibilidade === opcao.valor && styles.configChipAtivo,
-                          ]}
-                          onPress={() => alterarVisibilidade(opcao.valor)}
-                          disabled={salvandoVisibilidade}
-                        >
-                          <Text
-                            style={[
-                              styles.configChipText,
-                              visibilidade === opcao.valor && styles.configChipTextAtivo,
-                            ]}
-                          >
-                            {opcao.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                )}
 
                 {carregandoPetianos ? (
                   <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 30 }} />
@@ -507,57 +441,104 @@ export default function RelatoriosScreen() {
                   </View>
                 </View>
 
-                {petianoSelecionado.id === usuarioId && (
-                  <TouchableOpacity
-                    style={[styles.uploadBtn, enviando && styles.uploadBtnDisabled]}
-                    onPress={enviarRelatorio}
-                    disabled={enviando}
-                  >
-                    {enviando ? (
-                      <ActivityIndicator color="#FFFFFF" />
-                    ) : (
-                      <>
-                        <UploadIconSvg />
-                        <Text style={styles.uploadBtnText}>Enviar novo relatório (PDF)</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+                {/* --- CONFIGURAÇÃO DE VISIBILIDADE: dono ou Tutor podem mexer --- */}
+                {(souTutor || petianoSelecionado.id === usuarioId) && (
+                  <View style={styles.configBox}>
+                    <Text style={styles.configTitulo}>Quem pode ver os relatórios deste petiano?</Text>
+                    <View style={styles.configOpcoes}>
+                      {OPCOES_VISIBILIDADE.map((opcao) => (
+                        <TouchableOpacity
+                          key={opcao.valor}
+                          style={[
+                            styles.configChip,
+                            petianoSelecionado.visibilidade_relatorios === opcao.valor && styles.configChipAtivo,
+                          ]}
+                          onPress={() => alterarVisibilidadeDoPetiano(opcao.valor)}
+                          disabled={salvandoVisibilidade}
+                        >
+                          <Text
+                            style={[
+                              styles.configChipText,
+                              petianoSelecionado.visibilidade_relatorios === opcao.valor && styles.configChipTextAtivo,
+                            ]}
+                          >
+                            {opcao.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
                 )}
 
-                {carregandoRelatorios ? (
-                  <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 30 }} />
-                ) : relatorios.length > 0 ? (
-                  <View style={styles.relatoriosLista}>
-                    {relatorios.map((relatorio) => (
-                      <View key={relatorio.uuid} style={styles.relatorioCard}>
-                        <TouchableOpacity
-                          style={styles.relatorioCardConteudo}
-                          onPress={() => abrirArquivo(relatorio.arquivo_url)}
-                        >
-                          <FileIconSvg />
-                          <View style={styles.relatorioInfo}>
-                            <Text style={styles.relatorioNome} numberOfLines={1}>{relatorio.nome_arquivo}</Text>
-                            <Text style={styles.relatorioData}>Enviado em {formatarDataHora(relatorio.created_at)}</Text>
-                          </View>
-                        </TouchableOpacity>
-
-                        {relatorio.petiano_id === usuarioId && (
-                          <TouchableOpacity
-                            style={styles.excluirBtn}
-                            onPress={() => excluirRelatorio(relatorio)}
-                          >
-                            <TrashIconSvg />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    ))}
+                {!podeVer(petianoSelecionado) ? (
+                  <View style={styles.lockedInline}>
+                    <LockIconSvg />
+                    <Text style={styles.lockedText}>
+                      {petianoSelecionado.visibilidade_relatorios === 'tutor'
+                        ? 'Apenas o Tutor pode ver os relatórios deste petiano.'
+                        : 'Você precisa estar logado para ver os relatórios deste petiano.'}
+                    </Text>
+                    {!logado && (
+                      <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/login')}>
+                        <Text style={styles.loginBtnText}>Fazer Login</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 ) : (
-                  <Text style={styles.emptyText}>
-                    {petianoSelecionado.id === usuarioId
-                      ? 'Você ainda não enviou nenhum relatório.'
-                      : 'Este petiano ainda não enviou nenhum relatório.'}
-                  </Text>
+                  <>
+                    {petianoSelecionado.id === usuarioId && (
+                      <TouchableOpacity
+                        style={[styles.uploadBtn, enviando && styles.uploadBtnDisabled]}
+                        onPress={enviarRelatorio}
+                        disabled={enviando}
+                      >
+                        {enviando ? (
+                          <ActivityIndicator color="#FFFFFF" />
+                        ) : (
+                          <>
+                            <UploadIconSvg />
+                            <Text style={styles.uploadBtnText}>Enviar novo relatório (PDF)</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    )}
+
+                    {carregandoRelatorios ? (
+                      <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 30 }} />
+                    ) : relatorios.length > 0 ? (
+                      <View style={styles.relatoriosLista}>
+                        {relatorios.map((relatorio) => (
+                          <View key={relatorio.uuid} style={styles.relatorioCard}>
+                            <TouchableOpacity
+                              style={styles.relatorioCardConteudo}
+                              onPress={() => abrirArquivo(relatorio.arquivo_url)}
+                            >
+                              <FileIconSvg />
+                              <View style={styles.relatorioInfo}>
+                                <Text style={styles.relatorioNome} numberOfLines={1}>{relatorio.nome_arquivo}</Text>
+                                <Text style={styles.relatorioData}>Enviado em {formatarDataHora(relatorio.created_at)}</Text>
+                              </View>
+                            </TouchableOpacity>
+
+                            {relatorio.petiano_id === usuarioId && (
+                              <TouchableOpacity
+                                style={styles.excluirBtn}
+                                onPress={() => excluirRelatorio(relatorio)}
+                              >
+                                <TrashIconSvg />
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.emptyText}>
+                        {petianoSelecionado.id === usuarioId
+                          ? 'Você ainda não enviou nenhum relatório.'
+                          : 'Este petiano ainda não enviou nenhum relatório.'}
+                      </Text>
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -600,9 +581,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2a2b3d',
     padding: 16,
-    marginBottom: 30,
+    marginBottom: 20,
   },
-  configTitulo: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold', marginBottom: 12 },
+  configTitulo: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold', marginBottom: 12 },
   configOpcoes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   configChip: {
     paddingVertical: 8,
@@ -615,6 +596,20 @@ const styles = StyleSheet.create({
   configChipAtivo: { backgroundColor: '#F0502D', borderColor: '#F0502D' },
   configChipText: { color: '#AAAAAA', fontSize: 12, fontWeight: '600' },
   configChipTextAtivo: { color: '#FFFFFF' },
+
+  lockedInline: {
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#1c1d2b',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    borderStyle: 'dashed',
+    padding: 28,
+  },
+  lockedText: { color: '#AAAAAA', fontSize: 14, textAlign: 'center' },
+  loginBtn: { backgroundColor: '#F0502D', paddingVertical: 10, paddingHorizontal: 22, borderRadius: 8, marginTop: 6 },
+  loginBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
 
   grupoSection: { marginBottom: 32 },
   grupoTitulo: {
@@ -686,10 +681,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
-  lockedContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 30 },
-  lockedTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold' },
-  lockedText: { color: '#AAAAAA', fontSize: 14, textAlign: 'center' },
-  loginBtn: { backgroundColor: '#F0502D', paddingVertical: 12, paddingHorizontal: 28, borderRadius: 8, marginTop: 10 },
-  loginBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
 });

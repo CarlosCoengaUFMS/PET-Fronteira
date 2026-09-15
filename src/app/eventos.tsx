@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, ActivityIndicator, TextInput, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import Svg, { Path, Rect, Circle } from 'react-native-svg';
@@ -46,6 +46,33 @@ const TagIconSvg = () => (
   </Svg>
 );
 
+const CommentIconSvg = () => (
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+    <Path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="#F0502D" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const TrashIconSvg = () => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 6h18" stroke="#FF4444" strokeWidth="2" strokeLinecap="round" />
+    <Path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="#FF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const UserIconSvg = ({ size = 28 }: { size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="11" fill="#2a2b3d" stroke="#F0502D" strokeWidth="1.5" />
+    <Circle cx="12" cy="9" r="3" fill="#F0502D" />
+    <Path d="M6 19c0-3.3 2.7-6 6-6s6 2.7 6 6" fill="#F0502D" />
+  </Svg>
+);
+
+const ReplyIconSvg = () => (
+  <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
+    <Path d="M9 17l-5-5 5-5M4 12h10a5 5 0 0 1 5 5v2" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 // --- TIPOS ---
 interface AtividadeEvento {
   uuid: string;
@@ -55,6 +82,17 @@ interface AtividadeEvento {
   status: string | null;
   imagem_url: string | null;
   projeto: { titulo: string } | null;
+}
+
+interface Comentario {
+  uuid: string;
+  atividade_uuid: string;
+  autor_id: string;
+  resposta_a: string | null;
+  texto: string;
+  created_at: string;
+  autor_nome?: string;
+  autor_avatar?: string | null;
 }
 
 const MESES = [
@@ -75,6 +113,16 @@ const formatarDataHora = (iso: string) => {
   });
 };
 
+const formatarDataComentario = (iso: string) => {
+  const data = new Date(iso);
+  return data.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 export default function EventosScreen() {
   const hoje = new Date();
   const [mesAtual, setMesAtual] = useState(hoje.getMonth());
@@ -82,19 +130,42 @@ export default function EventosScreen() {
 
   const [carregandoSessao, setCarregandoSessao] = useState(true);
   const [logado, setLogado] = useState(false);
+  const [usuarioId, setUsuarioId] = useState<string | null>(null);
+  const [souPetiano, setSouPetiano] = useState(false);
 
   const [atividades, setAtividades] = useState<AtividadeEvento[]>([]);
   const [carregandoAtividades, setCarregandoAtividades] = useState(true);
 
+  const [comentariosAbertoUuid, setComentariosAbertoUuid] = useState<string | null>(null);
+  const [comentariosPorAtividade, setComentariosPorAtividade] = useState<Record<string, Comentario[]>>({});
+  const [carregandoComentarios, setCarregandoComentarios] = useState(false);
+  const [novoComentario, setNovoComentario] = useState('');
+  const [enviandoComentario, setEnviandoComentario] = useState(false);
+
+  const [respondendoUuid, setRespondendoUuid] = useState<string | null>(null);
+  const [textoResposta, setTextoResposta] = useState('');
+  const [enviandoResposta, setEnviandoResposta] = useState(false);
+
   useEffect(() => {
     verificarSessao();
+    buscarAtividades();
   }, []);
 
   const verificarSessao = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       setLogado(true);
-      buscarAtividades();
+      setUsuarioId(session.user.id);
+
+      // Qualquer usuário com linha em "petianos" (independente do cargo)
+      // pode moderar comentários de qualquer pessoa
+      const { data: petiano } = await supabase
+        .from('petianos')
+        .select('id')
+        .eq('id', session.user.id)
+        .single();
+
+      setSouPetiano(!!petiano);
     } else {
       setLogado(false);
     }
@@ -195,36 +266,151 @@ export default function EventosScreen() {
     }
   });
 
+  const buscarComentarios = async (atividadeUuid: string) => {
+    setCarregandoComentarios(true);
+    const { data, error } = await supabase
+      .from('comentarios_atividade')
+      .select('uuid, atividade_uuid, autor_id, resposta_a, texto, created_at')
+      .eq('atividade_uuid', atividadeUuid)
+      .order('created_at', { ascending: true });
+
+    if (!error && data) {
+      const autorIds = [...new Set(data.map((c: any) => c.autor_id))];
+      let infoPorId: Record<string, { nome: string; avatar_url: string | null }> = {};
+
+      if (autorIds.length > 0) {
+        // 1º: procura o nome/foto entre os petianos
+        const { data: petianosData } = await supabase
+          .from('petianos')
+          .select('id, nome, avatar_url')
+          .in('id', autorIds);
+
+        (petianosData || []).forEach((p: any) => {
+          infoPorId[p.id] = { nome: p.nome, avatar_url: p.avatar_url };
+        });
+
+        // 2º: quem não é petiano, procura entre os usuários externos (visitantes)
+        const idsRestantes = autorIds.filter((id) => !infoPorId[id]);
+        if (idsRestantes.length > 0) {
+          const { data: externosData } = await supabase
+            .from('usuarios_externos')
+            .select('id, nome')
+            .in('id', idsRestantes);
+
+          (externosData || []).forEach((u: any) => {
+            infoPorId[u.id] = { nome: u.nome, avatar_url: null };
+          });
+        }
+      }
+
+      const comInfo = (data as any[]).map((c) => ({
+        ...c,
+        autor_nome: infoPorId[c.autor_id]?.nome || 'Usuário',
+        autor_avatar: infoPorId[c.autor_id]?.avatar_url || null,
+      }));
+
+      setComentariosPorAtividade((atual) => ({ ...atual, [atividadeUuid]: comInfo }));
+    } else if (error) {
+      console.error('Erro ao buscar comentários:', error);
+    }
+    setCarregandoComentarios(false);
+  };
+
+  const toggleComentarios = (atividadeUuid: string) => {
+    if (comentariosAbertoUuid === atividadeUuid) {
+      setComentariosAbertoUuid(null);
+      return;
+    }
+    setComentariosAbertoUuid(atividadeUuid);
+    setNovoComentario('');
+    setRespondendoUuid(null);
+    if (!comentariosPorAtividade[atividadeUuid]) {
+      buscarComentarios(atividadeUuid);
+    }
+  };
+
+  const enviarComentario = async (atividadeUuid: string) => {
+    if (!novoComentario.trim() || !usuarioId) return;
+
+    setEnviandoComentario(true);
+    const { error } = await supabase.from('comentarios_atividade').insert({
+      atividade_uuid: atividadeUuid,
+      autor_id: usuarioId,
+      texto: novoComentario.trim(),
+    });
+
+    if (error) {
+      console.error('Erro ao enviar comentário:', error);
+      Alert.alert('Erro', 'Não foi possível enviar o comentário.');
+    } else {
+      setNovoComentario('');
+      await buscarComentarios(atividadeUuid);
+    }
+    setEnviandoComentario(false);
+  };
+
+  const enviarResposta = async (atividadeUuid: string, comentarioPaiUuid: string) => {
+    if (!textoResposta.trim() || !usuarioId) return;
+
+    setEnviandoResposta(true);
+    const { error } = await supabase.from('comentarios_atividade').insert({
+      atividade_uuid: atividadeUuid,
+      autor_id: usuarioId,
+      resposta_a: comentarioPaiUuid,
+      texto: textoResposta.trim(),
+    });
+
+    if (error) {
+      console.error('Erro ao enviar resposta:', error);
+      Alert.alert('Erro', 'Não foi possível enviar a resposta.');
+    } else {
+      setTextoResposta('');
+      setRespondendoUuid(null);
+      await buscarComentarios(atividadeUuid);
+    }
+    setEnviandoResposta(false);
+  };
+
+  const confirmarExclusao = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (Platform.OS === 'web') {
+        resolve(window.confirm('Tem certeza que deseja excluir este comentário?'));
+      } else {
+        Alert.alert(
+          'Excluir comentário',
+          'Tem certeza que deseja excluir este comentário?',
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Excluir', style: 'destructive', onPress: () => resolve(true) },
+          ]
+        );
+      }
+    });
+  };
+
+  const excluirComentario = async (comentario: Comentario) => {
+    const confirmado = await confirmarExclusao();
+    if (!confirmado) return;
+
+    const { error } = await supabase.from('comentarios_atividade').delete().eq('uuid', comentario.uuid);
+    if (!error) {
+      await buscarComentarios(comentario.atividade_uuid);
+    } else {
+      console.error('Erro ao excluir comentário:', error);
+      Alert.alert('Erro', 'Não foi possível excluir o comentário.');
+    }
+  };
+
+  // Pode excluir se for o autor OU se for qualquer petiano (moderação)
+  const podeExcluirComentario = (comentario: Comentario) => {
+    return comentario.autor_id === usuarioId || souPetiano;
+  };
+
   if (carregandoSessao) {
     return (
       <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color="#F0502D" />
       </View>
-    );
-  }
-
-  if (!logado) {
-    return (
-      <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={voltar} style={styles.backButton}>
-              <BackIconSvg />
-              <Text style={styles.backButtonText}>Voltar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={irParaHome} style={styles.homeBtn}>
-              <HomeIconSvg />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.lockedContainer}>
-            <Text style={styles.lockedTitle}>Área restrita</Text>
-            <Text style={styles.lockedText}>Você precisa estar logado para ver o calendário de eventos.</Text>
-            <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/login')}>
-              <Text style={styles.loginBtnText}>Fazer Login</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      </ThemedView>
     );
   }
 
@@ -306,43 +492,198 @@ export default function EventosScreen() {
                 <View style={styles.eventosLista}>
                   {atividades.map((atividade) => {
                     const concluida = atividade.status === 'Concluída';
+                    const comentariosAbertos = comentariosAbertoUuid === atividade.uuid;
+                    const todosComentarios = comentariosPorAtividade[atividade.uuid] || [];
+                    const comentariosTopo = todosComentarios.filter((c) => !c.resposta_a);
+                    const respostasPorPai: Record<string, Comentario[]> = {};
+                    todosComentarios.forEach((c) => {
+                      if (c.resposta_a) {
+                        if (!respostasPorPai[c.resposta_a]) respostasPorPai[c.resposta_a] = [];
+                        respostasPorPai[c.resposta_a].push(c);
+                      }
+                    });
 
                     return (
                       <View key={atividade.uuid} style={styles.eventoCard}>
-                        <View style={styles.eventoThumbWrapper}>
-                          {atividade.imagem_url ? (
-                            <Image source={{ uri: atividade.imagem_url }} style={styles.eventoImagem} resizeMode="cover" />
-                          ) : (
-                            <View style={styles.eventoImagemPlaceholder}>
-                              <FolderIconSvg />
+                        <View style={styles.eventoLinha}>
+                          <View style={styles.eventoThumbWrapper}>
+                            {atividade.imagem_url ? (
+                              <Image source={{ uri: atividade.imagem_url }} style={styles.eventoImagem} resizeMode="cover" />
+                            ) : (
+                              <View style={styles.eventoImagemPlaceholder}>
+                                <FolderIconSvg />
+                              </View>
+                            )}
+                            <View
+                              style={[
+                                styles.eventoBadge,
+                                concluida ? styles.eventoBadgeConcluido : styles.eventoBadgeEmBreve,
+                              ]}
+                            >
+                              <Text style={styles.eventoBadgeText}>
+                                {concluida ? 'Concluído' : 'Em breve'}
+                              </Text>
                             </View>
-                          )}
-                          <View
-                            style={[
-                              styles.eventoBadge,
-                              concluida ? styles.eventoBadgeConcluido : styles.eventoBadgeEmBreve,
-                            ]}
-                          >
-                            <Text style={styles.eventoBadgeText}>
-                              {concluida ? 'Concluído' : 'Em breve'}
-                            </Text>
+                          </View>
+
+                          <View style={styles.eventoConteudo}>
+                            <Text style={styles.eventoDataHora}>{formatarDataHora(atividade.data_inicio)}</Text>
+                            <Text style={styles.eventoTitulo}>{atividade.titulo}</Text>
+                            {atividade.sobre ? (
+                              <Text style={styles.eventoSobre}>{atividade.sobre}</Text>
+                            ) : null}
+
+                            {atividade.projeto?.titulo ? (
+                              <View style={styles.eventoMetaRow}>
+                                <TagIconSvg />
+                                <Text style={styles.eventoMetaText}>{atividade.projeto.titulo}</Text>
+                              </View>
+                            ) : null}
                           </View>
                         </View>
 
-                        <View style={styles.eventoConteudo}>
-                          <Text style={styles.eventoDataHora}>{formatarDataHora(atividade.data_inicio)}</Text>
-                          <Text style={styles.eventoTitulo}>{atividade.titulo}</Text>
-                          {atividade.sobre ? (
-                            <Text style={styles.eventoSobre}>{atividade.sobre}</Text>
-                          ) : null}
+                        {/* --- COMENTÁRIOS --- */}
+                        <TouchableOpacity
+                          style={styles.comentariosToggle}
+                          onPress={() => toggleComentarios(atividade.uuid)}
+                        >
+                          <CommentIconSvg />
+                          <Text style={styles.comentariosToggleText}>
+                            {comentariosAbertos ? 'Ocultar comentários' : 'Comentários e perguntas'}
+                            {comentariosTopo.length > 0 ? ` (${comentariosTopo.length})` : ''}
+                          </Text>
+                        </TouchableOpacity>
 
-                          {atividade.projeto?.titulo ? (
-                            <View style={styles.eventoMetaRow}>
-                              <TagIconSvg />
-                              <Text style={styles.eventoMetaText}>{atividade.projeto.titulo}</Text>
-                            </View>
-                          ) : null}
-                        </View>
+                        {comentariosAbertos && (
+                          <View style={styles.comentariosBox}>
+                            {carregandoComentarios ? (
+                              <ActivityIndicator color="#F0502D" style={{ marginVertical: 10 }} />
+                            ) : comentariosTopo.length > 0 ? (
+                              <View style={styles.comentariosLista}>
+                                {comentariosTopo.map((comentario) => (
+                                  <View key={comentario.uuid} style={styles.comentarioItem}>
+                                    <View style={styles.comentarioLinha}>
+                                      {comentario.autor_avatar ? (
+                                        <Image source={{ uri: comentario.autor_avatar }} style={styles.comentarioAvatar} />
+                                      ) : (
+                                        <UserIconSvg size={28} />
+                                      )}
+                                      <View style={styles.comentarioConteudo}>
+                                        <View style={styles.comentarioTopo}>
+                                          <Text style={styles.comentarioAutor}>{comentario.autor_nome}</Text>
+                                          <Text style={styles.comentarioData}>{formatarDataComentario(comentario.created_at)}</Text>
+                                        </View>
+                                        <Text style={styles.comentarioTexto}>{comentario.texto}</Text>
+
+                                        <View style={styles.comentarioAcoesRow}>
+                                          {logado && (
+                                            <TouchableOpacity
+                                              style={styles.responderBtn}
+                                              onPress={() => {
+                                                setRespondendoUuid(respondendoUuid === comentario.uuid ? null : comentario.uuid);
+                                                setTextoResposta('');
+                                              }}
+                                            >
+                                              <ReplyIconSvg />
+                                              <Text style={styles.responderBtnText}>
+                                                {respondendoUuid === comentario.uuid ? 'Cancelar' : 'Responder'}
+                                              </Text>
+                                            </TouchableOpacity>
+                                          )}
+                                          {podeExcluirComentario(comentario) && (
+                                            <TouchableOpacity onPress={() => excluirComentario(comentario)}>
+                                              <TrashIconSvg />
+                                            </TouchableOpacity>
+                                          )}
+                                        </View>
+
+                                        {respondendoUuid === comentario.uuid && (
+                                          <View style={styles.respostaFormRow}>
+                                            <TextInput
+                                              style={styles.comentarioInput}
+                                              placeholder="Escreva sua resposta..."
+                                              placeholderTextColor="#666"
+                                              value={textoResposta}
+                                              onChangeText={setTextoResposta}
+                                              multiline
+                                            />
+                                            <TouchableOpacity
+                                              style={[styles.comentarioEnviarBtn, enviandoResposta && styles.comentarioEnviarBtnDisabled]}
+                                              onPress={() => enviarResposta(atividade.uuid, comentario.uuid)}
+                                              disabled={enviandoResposta}
+                                            >
+                                              {enviandoResposta ? (
+                                                <ActivityIndicator color="#FFFFFF" size="small" />
+                                              ) : (
+                                                <Text style={styles.comentarioEnviarBtnText}>Enviar</Text>
+                                              )}
+                                            </TouchableOpacity>
+                                          </View>
+                                        )}
+
+                                        {/* --- RESPOSTAS DESTE COMENTÁRIO --- */}
+                                        {(respostasPorPai[comentario.uuid] || []).map((resposta) => (
+                                          <View key={resposta.uuid} style={styles.respostaItem}>
+                                            {resposta.autor_avatar ? (
+                                              <Image source={{ uri: resposta.autor_avatar }} style={styles.respostaAvatar} />
+                                            ) : (
+                                              <UserIconSvg size={22} />
+                                            )}
+                                            <View style={styles.comentarioConteudo}>
+                                              <View style={styles.comentarioTopo}>
+                                                <Text style={styles.comentarioAutor}>{resposta.autor_nome}</Text>
+                                                <Text style={styles.comentarioData}>{formatarDataComentario(resposta.created_at)}</Text>
+                                                {podeExcluirComentario(resposta) && (
+                                                  <TouchableOpacity onPress={() => excluirComentario(resposta)}>
+                                                    <TrashIconSvg />
+                                                  </TouchableOpacity>
+                                                )}
+                                              </View>
+                                              <Text style={styles.comentarioTexto}>{resposta.texto}</Text>
+                                            </View>
+                                          </View>
+                                        ))}
+                                      </View>
+                                    </View>
+                                  </View>
+                                ))}
+                              </View>
+                            ) : (
+                              <Text style={styles.comentariosVazio}>Nenhum comentário ainda. Seja o primeiro a perguntar!</Text>
+                            )}
+
+                            {logado ? (
+                              <View style={styles.comentarioFormRow}>
+                                <TextInput
+                                  style={styles.comentarioInput}
+                                  placeholder="Escreva uma pergunta ou comentário..."
+                                  placeholderTextColor="#666"
+                                  value={novoComentario}
+                                  onChangeText={setNovoComentario}
+                                  multiline
+                                />
+                                <TouchableOpacity
+                                  style={[styles.comentarioEnviarBtn, enviandoComentario && styles.comentarioEnviarBtnDisabled]}
+                                  onPress={() => enviarComentario(atividade.uuid)}
+                                  disabled={enviandoComentario}
+                                >
+                                  {enviandoComentario ? (
+                                    <ActivityIndicator color="#FFFFFF" size="small" />
+                                  ) : (
+                                    <Text style={styles.comentarioEnviarBtnText}>Enviar</Text>
+                                  )}
+                                </TouchableOpacity>
+                              </View>
+                            ) : (
+                              <View style={styles.loginParaComentar}>
+                                <Text style={styles.loginParaComentarText}>Faça login para comentar ou perguntar.</Text>
+                                <TouchableOpacity onPress={() => router.push('/login')}>
+                                  <Text style={styles.loginParaComentarLink}>Fazer Login</Text>
+                                </TouchableOpacity>
+                              </View>
+                            )}
+                          </View>
+                        )}
                       </View>
                     );
                   })}
@@ -431,17 +772,17 @@ const styles = StyleSheet.create({
   calendarDayText: { color: '#CCCCCC', fontSize: 12 },
   calendarDayTextToday: { color: '#FFFFFF', fontWeight: 'bold' },
 
-  // --- LISTA DE EVENTOS (estilo aproximado do site antigo) ---
+  // --- LISTA DE EVENTOS ---
   eventosSection: { paddingHorizontal: 20, paddingTop: 10 },
   eventosLista: { gap: 18 },
   eventoCard: {
-    flexDirection: 'row',
     backgroundColor: '#1c1d2b',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#2a2b3d',
     overflow: 'hidden',
   },
+  eventoLinha: { flexDirection: 'row', alignItems: 'center' },
   eventoThumbWrapper: { width: 120, position: 'relative' },
   eventoImagem: { width: '100%', height: '100%', minHeight: 130 },
   eventoImagemPlaceholder: {
@@ -470,6 +811,69 @@ const styles = StyleSheet.create({
   eventoMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   eventoMetaText: { color: '#888', fontSize: 11 },
 
+  comentariosToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#2a2b3d',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  comentariosToggleText: { color: '#F0502D', fontSize: 12, fontWeight: '600' },
+
+  comentariosBox: {
+    borderTopWidth: 1,
+    borderTopColor: '#2a2b3d',
+    padding: 14,
+    gap: 12,
+  },
+  comentariosLista: { gap: 16 },
+  comentariosVazio: { color: '#666', fontSize: 12, fontStyle: 'italic' },
+
+  comentarioItem: { gap: 4 },
+  comentarioLinha: { flexDirection: 'row', gap: 10 },
+  comentarioAvatar: { width: 28, height: 28, borderRadius: 14 },
+  comentarioConteudo: { flex: 1, gap: 2 },
+  comentarioTopo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  comentarioAutor: { color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
+  comentarioData: { color: '#666', fontSize: 11, flex: 1 },
+  comentarioTexto: { color: '#CCCCCC', fontSize: 13, lineHeight: 19 },
+
+  comentarioAcoesRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 4 },
+  responderBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  responderBtnText: { color: '#F0502D', fontSize: 11, fontWeight: '600' },
+
+  respostaFormRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginTop: 8 },
+  respostaItem: { flexDirection: 'row', gap: 8, marginTop: 10, marginLeft: 20, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: '#2a2b3d' },
+  respostaAvatar: { width: 22, height: 22, borderRadius: 11 },
+
+  comentarioFormRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-end' },
+  comentarioInput: {
+    flex: 1,
+    backgroundColor: '#11121C',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    color: '#FFFFFF',
+    fontSize: 13,
+    padding: 10,
+    minHeight: 40,
+    maxHeight: 90,
+  },
+  comentarioEnviarBtn: {
+    backgroundColor: '#F0502D',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  comentarioEnviarBtnDisabled: { opacity: 0.7 },
+  comentarioEnviarBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold' },
+
+  loginParaComentar: { alignItems: 'center', gap: 6, paddingVertical: 6 },
+  loginParaComentarText: { color: '#888', fontSize: 12 },
+  loginParaComentarLink: { color: '#F0502D', fontSize: 13, fontWeight: 'bold' },
+
   eventosEmptyState: {
     alignItems: 'center',
     gap: 14,
@@ -480,10 +884,4 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     padding: 30,
   },
-
-  lockedContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 30 },
-  lockedTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold' },
-  lockedText: { color: '#AAAAAA', fontSize: 14, textAlign: 'center' },
-  loginBtn: { backgroundColor: '#F0502D', paddingVertical: 12, paddingHorizontal: 28, borderRadius: 8, marginTop: 10 },
-  loginBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
 });

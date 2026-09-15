@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import * as Device from 'expo-device';
 import { Platform, StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Modal, Alert, Animated, Easing, Linking, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Link, Stack, router } from 'expo-router';
+import { Link, Stack, router,  type Href } from 'expo-router';
 import Svg, { Path, Rect, Circle } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
@@ -259,6 +259,43 @@ const StatLivesIconSvg = () => (
     <Path d="M4 10h16M9 4v4M15 4v4" stroke="#F0502D" strokeWidth="2" strokeLinecap="round" />
   </Svg>
 );
+
+// --- LINK DO FOOTER COM HOVER (fica laranja e sublinha ao passar o mouse) ---
+const FooterLink = ({
+  href,
+  onPress,
+  children,
+}: {
+  href?: Href;
+  onPress?: () => void;
+  children: string;
+}) => {
+  const [hover, setHover] = useState(false);
+
+  const textStyle = [styles.footerLink, hover && styles.footerLinkHover];
+
+  const content = (
+    <TouchableOpacity
+      onPress={onPress}
+      // @ts-ignore - eventos de mouse funcionam via react-native-web
+      onMouseEnter={() => setHover(true)}
+      // @ts-ignore
+      onMouseLeave={() => setHover(false)}
+    >
+      <Text style={textStyle}>{children}</Text>
+    </TouchableOpacity>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} asChild>
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
+};
 
 // --- TIPO: PETIANO VINDO DO SUPABASE ---
 interface Petiano {
@@ -1018,41 +1055,39 @@ export default function HomeScreen() {
                   <Text style={styles.footerTitle}>PET Fronteira</Text>
                   <Text style={styles.footerText}>UFMS Universidade Federal de Mato Grosso do Sul</Text>
                   <Text style={styles.footerText}>Campus de Ponta Porã</Text>
-
-
                 </View>
 
                 <View style={styles.footerSection}>
                   <Text style={styles.footerTitle}>Links Rápidos</Text>
-                  <Link href="/sobre" style={styles.footerLink}>Sobre</Link>
-                  <Link href="/projetos" style={styles.footerLink}>Projetos</Link>
-                  <Link href="/eventos" style={styles.footerLink}>Eventos</Link>
-                  <Link href="/contato" style={styles.footerLink}>Contato</Link>
+                  <FooterLink href="/sobre">Sobre</FooterLink>
+                  <FooterLink href="/projetos">Projetos</FooterLink>
+                  <FooterLink href="/eventos">Eventos</FooterLink>
+                  <FooterLink href="/contato">Contato</FooterLink>
                 </View>
 
                 <View style={styles.footerSection}>
                   <Text style={styles.footerTitle}>Úteis</Text>
-                  <TouchableOpacity onPress={() => abrirLink('https://prograd.ufms.br/calendario-academico/')}>
-                    <Text style={styles.footerLink}>Calendário Acadêmico</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => abrirLink('https://sigproj.ufms.br/')}>
-                    <Text style={styles.footerLink}>SIGPROJ</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => abrirLink('https://siscad.ufms.br/')}>
-                    <Text style={styles.footerLink}>SISCAD</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => abrirLink('https://ava.ufms.br/')}>
-                    <Text style={styles.footerLink}>AVA</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => abrirLink('https://prograd.ufms.br/programas-e-projetos/programa-de-educacao-tutorial-pet/')}>
-                    <Text style={styles.footerLink}>Pets UFMS</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => abrirLink('https://www.ufms.br/')}>
-                    <Text style={styles.footerLink}>UFMS</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => abrirLink('https://cppp.ufms.br/')}>
-                    <Text style={styles.footerLink}>Campus Ponta Porã</Text>
-                  </TouchableOpacity>
+                  <FooterLink onPress={() => abrirLink('https://prograd.ufms.br/calendario-academico/')}>
+                    Calendário Acadêmico
+                  </FooterLink>
+                  <FooterLink onPress={() => abrirLink('https://sigproj.ufms.br/')}>
+                    SIGPROJ
+                  </FooterLink>
+                  <FooterLink onPress={() => abrirLink('https://siscad.ufms.br/')}>
+                    SISCAD
+                  </FooterLink>
+                  <FooterLink onPress={() => abrirLink('https://ava.ufms.br/')}>
+                    AVA
+                  </FooterLink>
+                  <FooterLink onPress={() => abrirLink('https://prograd.ufms.br/programas-e-projetos/programa-de-educacao-tutorial-pet/')}>
+                    Pets UFMS
+                  </FooterLink>
+                  <FooterLink onPress={() => abrirLink('https://www.ufms.br/')}>
+                    UFMS
+                  </FooterLink>
+                  <FooterLink onPress={() => abrirLink('https://cppp.ufms.br/')}>
+                    Campus Ponta Porã
+                  </FooterLink>
                 </View>
 
                 <View style={styles.footerSection}>
@@ -1066,7 +1101,6 @@ export default function HomeScreen() {
                     >
                       <FacebookIconSvg size={22} />
                     </TouchableOpacity>
-
 
                     {/* Instagram */}
                     <TouchableOpacity
@@ -1360,18 +1394,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 56,
     left: 0,
-    width: 340,
-    maxWidth: 360,
+    width: 370,
+    maxWidth: 400,
     borderRadius: 12,
     overflow: 'hidden',
   },
 
-  footer: { backgroundColor: '#1c1d2b', borderTopWidth: 3, borderTopColor: '#F0502D', paddingVertical: 20, paddingHorizontal: 15 },
+  footer: { backgroundColor: '#1c1d2b', borderTopWidth: 3, borderTopColor: '#F0502D', paddingVertical: 24, paddingHorizontal: 18 },
   footerContent: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 15, marginBottom: 20 },
   footerSection: { flex: 1, minWidth: 140 },
   footerTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginBottom: 10, borderBottomWidth: 2, borderBottomColor: '#F0502D', paddingBottom: 5 },
   footerText: { color: '#CCCCCC', fontSize: 13, marginBottom: 5, lineHeight: 18 },
-  footerLink: { color: '#CCCCCC', fontSize: 13, marginBottom: 6, lineHeight: 18 },
+  footerLink: { color: '#F0502D', fontSize: 13, marginBottom: 6, lineHeight: 18 },
+  footerLinkHover: { color: '#FF7A50', textDecorationLine: 'underline' },
   footerPhoneRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
   footerPhoneText: { color: '#F0502D', fontSize: 13, fontWeight: 'bold' },
   socialLinks: { gap: 6 },

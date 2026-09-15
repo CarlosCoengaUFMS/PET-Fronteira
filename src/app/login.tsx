@@ -24,7 +24,6 @@ export default function LoginScreen() {
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
   const handleLogin = async () => {
-    // Validação básica
     if (!email || !senha) {
       Alert.alert('Erro', 'Por favor, preencha todos os campos');
       return;
@@ -38,17 +37,14 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      // Chamada real à API do Supabase
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email,
         password: senha,
       });
 
       if (error) {
-        // Se o Supabase retornar um erro (ex: senha errada), mostramos ao usuário
         Alert.alert('Erro no Login', error.message);
       } else {
-        // Se deu tudo certo, redireciona para a home
         Alert.alert('Sucesso', 'Login realizado com sucesso!');
         router.replace('/');
       }
@@ -79,7 +75,6 @@ export default function LoginScreen() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {/* Header com botão voltar */}
               <TouchableOpacity 
                 onPress={() => router.back()} 
                 style={styles.backButton}
@@ -87,18 +82,16 @@ export default function LoginScreen() {
                 <Text style={styles.backButtonText}>← Voltar</Text>
               </TouchableOpacity>
 
-              {/* Logo */}
               <View style={styles.logoContainer}>
                 <Image 
                   source={require('@/assets/images/icon.png')} 
                   style={styles.logo}
                   resizeMode="contain"
                 />
-                <Text style={styles.title}>PT Fronteira</Text>
+                <Text style={styles.title}>PET Fronteira</Text>
                 <Text style={styles.subtitle}>Faça login para continuar</Text>
               </View>
 
-              {/* Formulário */}
               <View style={styles.formContainer}>
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>E-mail</Text>
@@ -156,11 +149,20 @@ export default function LoginScreen() {
                   )}
                 </TouchableOpacity>
 
-                <View style={styles.registerContainer}>
-                  <Text style={styles.registerText}>Não tem uma conta? </Text>
+                {/* --- OPÇÕES DE CADASTRO --- */}
+                {/* O cadastro de petianos será restrito futuramente; por enquanto os dois convivem aqui */}
+                <View style={styles.registerOptionsContainer}>
+                  <Text style={styles.registerOptionsLabel}>Não tem uma conta?</Text>
+
+                  <Link href="/registro-fora" asChild>
+                    <TouchableOpacity style={styles.registerOptionBtnPrimary}>
+                      <Text style={styles.registerOptionBtnPrimaryText}>Cadastre-se</Text>
+                    </TouchableOpacity>
+                  </Link>
+
                   <Link href="/registro" asChild>
-                    <TouchableOpacity>
-                      <Text style={styles.registerLink}>Cadastre-se</Text>
+                    <TouchableOpacity style={styles.registerOptionBtnSecondary}>
+                      <Text style={styles.registerOptionBtnSecondaryText}>Sou petiano — cadastrar como Petiano</Text>
                     </TouchableOpacity>
                   </Link>
                 </View>
@@ -299,20 +301,42 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  registerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+
+  // --- OPÇÕES DE CADASTRO ---
+  registerOptionsContainer: {
+    alignItems: 'center',
+    gap: 10,
     marginBottom: 20,
   },
-  registerText: {
+  registerOptionsLabel: {
     color: '#999',
     fontSize: 14,
+    marginBottom: 2,
   },
-  registerLink: {
+  registerOptionBtnPrimary: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#F0502D',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  registerOptionBtnPrimaryText: {
     color: '#F0502D',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
   },
+  registerOptionBtnSecondary: {
+    paddingVertical: 6,
+  },
+  registerOptionBtnSecondaryText: {
+    color: '#666',
+    fontSize: 13,
+    textDecorationLine: 'underline',
+  },
+
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
