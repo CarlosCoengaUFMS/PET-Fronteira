@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, ActivityIndicator, TextInput, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
@@ -145,11 +145,25 @@ export default function EventosScreen() {
   const [respondendoUuid, setRespondendoUuid] = useState<string | null>(null);
   const [textoResposta, setTextoResposta] = useState('');
   const [enviandoResposta, setEnviandoResposta] = useState(false);
+  const respostaInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     verificarSessao();
     buscarAtividades();
   }, []);
+
+  // Foca o campo de resposta manualmente assim que ele aparece na tela.
+  // O autoFocus do TextInput não é confiável no React Native Web quando
+  // o campo é montado depois de um clique (o navegador bloqueia o foco
+  // automático fora do gesto direto), então usamos um ref + focus().
+  useEffect(() => {
+    if (respondendoUuid) {
+      const id = setTimeout(() => {
+        respostaInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(id);
+    }
+  }, [respondendoUuid]);
 
   const verificarSessao = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -289,16 +303,17 @@ export default function EventosScreen() {
           infoPorId[p.id] = { nome: p.nome, avatar_url: p.avatar_url };
         });
 
-        // 2º: quem não é petiano, procura entre os usuários externos (visitantes)
+        // 2º: quem não é petiano, procura entre os usuários externos (visitantes),
+        // que também têm nome e avatar_url próprios
         const idsRestantes = autorIds.filter((id) => !infoPorId[id]);
         if (idsRestantes.length > 0) {
           const { data: externosData } = await supabase
             .from('usuarios_externos')
-            .select('id, nome')
+            .select('id, nome, avatar_url')
             .in('id', idsRestantes);
 
           (externosData || []).forEach((u: any) => {
-            infoPorId[u.id] = { nome: u.nome, avatar_url: null };
+            infoPorId[u.id] = { nome: u.nome, avatar_url: u.avatar_url };
           });
         }
       }
@@ -600,6 +615,7 @@ export default function EventosScreen() {
                                         {respondendoUuid === comentario.uuid && (
                                           <View style={styles.respostaFormRow}>
                                             <TextInput
+                                              ref={respostaInputRef}
                                               style={styles.comentarioInput}
                                               placeholder="Escreva sua resposta..."
                                               placeholderTextColor="#666"

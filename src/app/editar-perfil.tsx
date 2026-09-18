@@ -5,177 +5,186 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  Alert,
   ScrollView,
   Image,
+  ActivityIndicator,
+  Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
-import { ThemedView } from '@/components/themed-view';
 import * as ImagePicker from 'expo-image-picker';
-import Svg, { Circle, Path } from 'react-native-svg';
+import { ThemedView } from '@/components/themed-view';
 
 import { supabase } from '../utils/supabase';
 
-const UserIconSvg = ({ size = 80 }: { size?: number }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Circle cx="12" cy="12" r="11" fill="#2a2b3d" stroke="#F0502D" strokeWidth="2" />
-    <Circle cx="12" cy="9" r="3" fill="#F0502D" />
-    <Path d="M6 19c0-3.3 2.7-6 6-6s6 2.7 6 6" fill="#F0502D" />
-  </Svg>
-);
+const mostrarAlerta = (titulo: string, mensagem: string) => {
+  if (Platform.OS === 'web') {
+    window.alert(`${titulo}\n\n${mensagem}`);
+  } else {
+    Alert.alert(titulo, mensagem);
+  }
+};
+
+const extensaoDoMime = (mime: string | null | undefined) => {
+  if (!mime) return 'jpg';
+  const partes = mime.split('/');
+  return partes[1] || 'jpg';
+};
 
 export default function EditarPerfilScreen() {
-  const [loading, setLoading] = useState(false);
-  const [carregandoDados, setCarregandoDados] = useState(true);
-  
-  const [nomeReal, setNomeReal] = useState('');
-  const [nomePersonalizado, setNomePersonalizado] = useState('');
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [usuarioId, setUsuarioId] = useState<string | null>(null);
+  const [ehPetiano, setEhPetiano] = useState(false);
+  const [cargo, setCargo] = useState('');
+
+  const [nome, setNome] = useState('');
   const [sobre, setSobre] = useState('');
-  
+  const [email, setEmail] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [novaImagemLocal, setNovaImagemLocal] = useState<string | null>(null);
+  const [novaFotoLocal, setNovaFotoLocal] = useState<ImagePicker.ImagePickerAsset | null>(null);
 
   useEffect(() => {
-    const carregarDadosUsuario = async () => {
-      const { data, error } = await supabase.auth.getUser();
-      
-      if (data?.user) {
-        const metadata = data.user.user_metadata;
-        setNomeReal(metadata?.full_name || '');
-        setNomePersonalizado(metadata?.custom_name || '');
-        setAvatarUrl(metadata?.avatar_url || null);
-
-        // Busca o "sobre" salvo na tabela petianos
-        const { data: petiano, error: erroPetiano } = await supabase
-          .from('petianos')
-          .select('sobre')
-          .eq('id', data.user.id)
-          .single();
-
-        if (!erroPetiano && petiano) {
-          setSobre(petiano.sobre || '');
-        }
-      } else {
-        Alert.alert('Erro', 'Usuário não encontrado. Faça login novamente.');
-        router.replace('/login');
-      }
-      setCarregandoDados(false);
-    };
-
-    carregarDadosUsuario();
+    carregarPerfil();
   }, []);
 
-  const escolherImagem = async () => {
-    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
-    if (permissao.granted === false) {
-      Alert.alert('Permissão negada', 'Precisamos de acesso às suas fotos para mudar o perfil.');
+  const carregarPerfil = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+      mostrarAlerta('Erro', 'Você precisa estar logado.');
+      router.replace('/login');
       return;
     }
 
-    let resultado = await ImagePicker.launchImageLibraryAsync({
+    setUsuarioId(session.user.id);
+    setEmail(session.user.email || '');
+
+    // Primeiro tenta como petiano
+    const { data: petiano } = await supabase
+      .from('petianos')
+      .select('nome, sobre, avatar_url, cargo')
+      .eq('id', session.user.id)
+      .single();
+
+    if (petiano) {
+      setEhPetiano(true);
+      setCargo(petiano.cargo || '');
+      setNome(petiano.nome || '');
+      setSobre(petiano.sobre || '');
+      setAvatarUrl(petiano.avatar_url || null);
+      setCarregando(false);
+      return;
+    }
+
+    // Se não é petiano, tenta como usuário externo (visitante)
+    const { data: externo } = await supabase
+      .from('usuarios_externos')
+      .select('nome, avatar_url')
+      .eq('id', session.user.id)
+      .single();
+
+    if (externo) {
+      setEhPetiano(false);
+      setNome(externo.nome || '');
+      setAvatarUrl(externo.avatar_url || null);
+    }
+
+    setCarregando(false);
+  };
+
+  const escolherFoto = async () => {
+    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissao.granted) {
+      mostrarAlerta('Permissão negada', 'Precisamos de acesso às suas fotos.');
+      return;
+    }
+
+    const resultado = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
+      allowsEditing: false,
+      quality: 1,
     });
 
     if (!resultado.canceled) {
-      setNovaImagemLocal(resultado.assets[0].uri);
+      setNovaFotoLocal(resultado.assets[0]);
     }
   };
 
-  const handleSalvar = async () => {
-    if (!nomeReal.trim()) {
-      Alert.alert('Erro', 'O nome real é obrigatório.');
+  const voltar = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
+  };
+
+  const salvarPerfil = async () => {
+    if (!nome.trim()) {
+      mostrarAlerta('Erro', 'Digite seu nome.');
       return;
     }
 
-    setLoading(true);
+    if (!usuarioId) return;
 
+    setSalvando(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        throw new Error('Usuário não autenticado.');
-      }
+      let urlFinal = avatarUrl;
 
-      let urlFinalDaImagem: string | null = avatarUrl;
+      if (novaFotoLocal) {
+        const resposta = await fetch(novaFotoLocal.uri);
+        const blob = await resposta.blob();
+        const extensao = extensaoDoMime(novaFotoLocal.mimeType);
+        const caminho = `${usuarioId}/${Date.now()}.${extensao}`;
 
-      if (novaImagemLocal) {
-        console.log('Iniciando upload da imagem...');
-        
-        const respostaFoto = await fetch(novaImagemLocal);
-        const blobFoto = await respostaFoto.blob();
-        
-        const caminhoArquivo = `${user.id}/${Date.now()}.jpg`;
-
-        const { data: dataUpload, error: erroUpload } = await supabase.storage
+        const { error: erroUpload } = await supabase.storage
           .from('avatars')
-          .upload(caminhoArquivo, blobFoto, {
-            contentType: 'image/jpeg',
-            upsert: true,
-          });
+          .upload(caminho, blob, { contentType: novaFotoLocal.mimeType || 'image/jpeg' });
 
         if (erroUpload) {
-          throw new Error('Falha ao enviar a imagem. Verifique se o bucket "avatars" foi criado e está como Public.');
+          throw new Error('Falha ao enviar a foto. Verifique se o bucket "avatars" permite seu envio.');
         }
 
-        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(caminhoArquivo);
-        urlFinalDaImagem = urlData.publicUrl;
+        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(caminho);
+        urlFinal = urlData.publicUrl;
       }
 
-      // 1. Atualiza o auth (usado no header, menu, etc.)
-      const { error: erroUpdate } = await supabase.auth.updateUser({
-        data: {
-          full_name: nomeReal,
-          custom_name: nomePersonalizado,
-          avatar_url: urlFinalDaImagem,
-        }
+      // Auth (comum aos dois tipos de conta)
+      const { error: erroAuth } = await supabase.auth.updateUser({
+        data: { full_name: nome, avatar_url: urlFinal },
       });
+      if (erroAuth) console.error('Erro ao atualizar auth:', erroAuth);
 
-      if (erroUpdate) throw erroUpdate;
+      // Tabela certa dependendo do tipo de conta
+      if (ehPetiano) {
+        const { error: erroPetiano } = await supabase
+          .from('petianos')
+          .update({ nome, sobre, avatar_url: urlFinal })
+          .eq('id', usuarioId);
 
-      // 2. Atualiza a tabela petianos (usada na Home para Tutor/Membros)
-      const { error: erroPetiano } = await supabase
-        .from('petianos')
-        .update({
-          nome: nomeReal,
-          avatar_url: urlFinalDaImagem,
-          sobre: sobre,
-        })
-        .eq('id', user.id);
-
-      if (erroPetiano) {
-        console.error('Erro ao atualizar petiano:', erroPetiano);
-      }
-
-      if (Platform.OS === 'web') {
-        window.alert('Perfil atualizado com sucesso!');
+        if (erroPetiano) throw erroPetiano;
       } else {
-        Alert.alert('Sucesso', 'Perfil atualizado com sucesso!');
+        const { error: erroExterno } = await supabase
+          .from('usuarios_externos')
+          .update({ nome, avatar_url: urlFinal })
+          .eq('id', usuarioId);
+
+        if (erroExterno) throw erroExterno;
       }
-      
-      router.replace('/');
-      
+
+      setAvatarUrl(urlFinal);
+      setNovaFotoLocal(null);
+      mostrarAlerta('Sucesso', 'Perfil atualizado com sucesso!');
     } catch (error: any) {
       console.error(error);
-      Alert.alert('Erro ao Salvar', error.message || 'Falha ao conectar com o servidor.');
+      mostrarAlerta('Erro', error.message || 'Não foi possível salvar o perfil.');
     } finally {
-      setLoading(false);
+      setSalvando(false);
     }
   };
 
-  const previewNomePrincipal = nomePersonalizado.trim() !== '' ? nomePersonalizado : nomeReal;
-  const previewNomeSecundario = nomePersonalizado.trim() !== '' ? `"${nomeReal}"` : '';
-  
-  const imagemExibida = novaImagemLocal || avatarUrl;
-
-  if (carregandoDados) {
+  if (carregando) {
     return (
       <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color="#F0502D" />
@@ -183,111 +192,93 @@ export default function EditarPerfilScreen() {
     );
   }
 
+  const primeiroNome = nome.split(' ')[0] || '';
+  const restoNome = nome.split(' ').slice(1).join(' ');
+
   return (
     <>
       <Stack.Screen options={{ title: 'Editar Perfil', headerShown: false }} />
-      
+
       <ThemedView style={styles.container}>
         <SafeAreaView style={styles.safeArea}>
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.keyboardView}
-          >
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              
-              {/* Botão Corrigido para ir direto para a Home */}
-              <TouchableOpacity onPress={() => router.replace('/')} style={styles.backButton}>
-                <Text style={styles.backButtonText}>← Voltar para o Início</Text>
-              </TouchableOpacity>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={voltar} style={styles.backButton}>
+              <Text style={styles.backButtonText}>← Voltar</Text>
+            </TouchableOpacity>
+          </View>
 
-              <View style={styles.headerTitle}>
-                <Text style={styles.title}>Editar Perfil</Text>
-                <Text style={styles.subtitle}>Personalize como você aparece no app</Text>
+          <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+            <Text style={styles.title}>
+              Editar Perfil<Text style={styles.orangeHighlight}>.</Text>
+            </Text>
+
+            <TouchableOpacity onPress={escolherFoto} style={styles.avatarPicker}>
+              {novaFotoLocal ? (
+                <Image source={{ uri: novaFotoLocal.uri }} style={styles.avatarImage} />
+              ) : avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarPlaceholderText}>📷</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <Text style={styles.avatarHint}>Toque na foto para trocar</Text>
+
+            <View style={styles.previewBox}>
+              <Text style={styles.previewLabel}>Pré-visualização</Text>
+              <View style={styles.previewNameContainer}>
+                <Text style={styles.previewMainName}>{primeiroNome || 'Seu'}</Text>
+                {restoNome ? <Text style={styles.previewSubName}>{restoNome}</Text> : null}
+              </View>
+              <Text style={styles.previewSubName}>{ehPetiano ? cargo : 'Visitante'}</Text>
+            </View>
+
+            <View style={styles.formContainer}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Nome</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Seu nome completo"
+                  placeholderTextColor="#666"
+                  value={nome}
+                  onChangeText={setNome}
+                />
               </View>
 
-              <View style={styles.avatarSection}>
-                <TouchableOpacity onPress={escolherImagem} style={styles.avatarContainer} disabled={loading}>
-                  {imagemExibida ? (
-                    <Image source={{ uri: imagemExibida }} style={styles.avatarImage} />
-                  ) : (
-                    <UserIconSvg size={100} />
-                  )}
-                  <View style={styles.editBadge}>
-                    <Text style={styles.editBadgeText}>📷</Text>
-                  </View>
-                </TouchableOpacity>
-                <Text style={styles.avatarHint}>Toque na foto para alterar</Text>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>E-mail</Text>
+                <TextInput style={[styles.input, styles.inputDesabilitado]} value={email} editable={false} />
+                <Text style={styles.inputHint}>O e-mail não pode ser alterado por aqui.</Text>
               </View>
 
-              <View style={styles.previewBox}>
-                <Text style={styles.previewLabel}>Como as pessoas vão te ver:</Text>
-                <View style={styles.previewNameContainer}>
-                  <Text style={styles.previewMainName}>{previewNomePrincipal || 'Seu Nome'}</Text>
-                  {previewNomeSecundario ? (
-                    <Text style={styles.previewSubName}>{previewNomeSecundario}</Text>
-                  ) : null}
-                </View>
-              </View>
-
-              <View style={styles.formContainer}>
-                
+              {ehPetiano && (
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Nome de Usuário Personalizado</Text>
-                  <Text style={styles.inputHint}>Seu apelido ou nome social (Opcional)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Ex: Ninja, Gui, Mari..."
-                    placeholderTextColor="#666"
-                    value={nomePersonalizado}
-                    onChangeText={setNomePersonalizado}
-                    editable={!loading}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Nome Real / Completo</Text>
-                  <Text style={styles.inputHint}>Usado para certificados e registros</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Seu nome verdadeiro"
-                    placeholderTextColor="#666"
-                    value={nomeReal}
-                    onChangeText={setNomeReal}
-                    editable={!loading}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Sobre</Text>
-                  <Text style={styles.inputHint}>Uma breve descrição sobre você (aparece publicamente caso você seja o Tutor)</Text>
+                  <Text style={styles.label}>Sobre você</Text>
                   <TextInput
                     style={[styles.input, styles.textArea]}
-                    placeholder="Conte um pouco sobre sua área de atuação, experiência..."
+                    placeholder="Fale um pouco sobre você"
                     placeholderTextColor="#666"
                     value={sobre}
                     onChangeText={setSobre}
-                    editable={!loading}
                     multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
                   />
                 </View>
+              )}
 
-                <TouchableOpacity 
-                  style={[styles.saveButton, loading && styles.saveButtonDisabled]}
-                  onPress={handleSalvar}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>Salvar Alterações</Text>
-                  )}
-                </TouchableOpacity>
-
-              </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
+              <TouchableOpacity
+                style={[styles.saveButton, salvando && styles.saveButtonDisabled]}
+                onPress={salvarPerfil}
+                disabled={salvando}
+              >
+                {salvando ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Salvar Alterações</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </SafeAreaView>
       </ThemedView>
     </>
@@ -298,69 +289,67 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#11121C' },
   center: { justifyContent: 'center', alignItems: 'center' },
   safeArea: { flex: 1 },
-  keyboardView: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
-  backButton: { marginBottom: 15, paddingVertical: 8, alignSelf: 'flex-start' },
+  header: { paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#2a2b3d' },
+  backButton: { flexDirection: 'row', alignItems: 'center' },
   backButtonText: { color: '#F0502D', fontSize: 16, fontWeight: '500' },
-  headerTitle: { marginBottom: 20 },
-  title: { color: '#FFFFFF', fontSize: 28, fontWeight: 'bold', marginBottom: 4 },
-  subtitle: { color: '#999', fontSize: 15 },
-  
-  avatarSection: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  avatarContainer: {
-    position: 'relative',
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: '#1c1d2b',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#F0502D',
-    marginBottom: 10,
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 55,
-  },
-  editBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#F0502D',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#11121C',
-  },
-  editBadgeText: {
-    fontSize: 14,
-  },
-  avatarHint: {
-    color: '#666',
-    fontSize: 13,
-  },
+  scrollContainer: { flexGrow: 1, padding: 20, alignItems: 'center' },
+  title: { color: '#FFFFFF', fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
+  orangeHighlight: { color: '#F0502D' },
 
-  previewBox: { backgroundColor: '#1c1d2b', borderRadius: 12, padding: 20, marginBottom: 25, borderWidth: 1, borderColor: '#2a2b3d', borderLeftWidth: 4, borderLeftColor: '#F0502D' },
-  previewLabel: { color: '#999', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
+  avatarPicker: { marginBottom: 8 },
+  avatarImage: { width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: '#F0502D' },
+  avatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#1c1d2b',
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarPlaceholderText: { fontSize: 32 },
+  avatarHint: { color: '#F0502D', fontSize: 13, fontWeight: '600', marginBottom: 20 },
+
+  previewBox: {
+    backgroundColor: '#1c1d2b',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 25,
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 400,
+  },
+  previewLabel: { color: '#999', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
   previewNameContainer: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 },
   previewMainName: { color: '#FFFFFF', fontSize: 24, fontWeight: 'bold' },
-  previewSubName: { color: '#888', fontSize: 16, fontStyle: 'italic' },
+  previewSubName: { color: '#888', fontSize: 14, fontStyle: 'italic' },
 
-  formContainer: { flex: 1 },
+  formContainer: { width: '100%', maxWidth: 400 },
   inputGroup: { marginBottom: 20 },
   label: { color: '#CCCCCC', fontSize: 15, fontWeight: '600', marginBottom: 4 },
-  inputHint: { color: '#666', fontSize: 12, marginBottom: 8 },
-  input: { backgroundColor: '#1c1d2b', borderRadius: 8, padding: 16, color: '#FFFFFF', fontSize: 16, borderWidth: 1, borderColor: '#2a2b3d' },
-  textArea: { minHeight: 100, paddingTop: 16 },
-  saveButton: { backgroundColor: '#F0502D', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginTop: 10 },
+  inputHint: { color: '#666', fontSize: 12, marginTop: 8 },
+  input: {
+    backgroundColor: '#1c1d2b',
+    borderRadius: 8,
+    padding: 16,
+    color: '#FFFFFF',
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+  },
+  inputDesabilitado: { opacity: 0.5 },
+  textArea: { minHeight: 100, paddingTop: 16, textAlignVertical: 'top' },
+
+  saveButton: {
+    backgroundColor: '#F0502D',
+    paddingVertical: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
   saveButtonDisabled: { opacity: 0.7 },
   saveButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
 });

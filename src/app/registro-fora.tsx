@@ -1,20 +1,21 @@
-import { ThemedView } from '@/components/themed-view';
-import { Link, Stack, router } from 'expo-router';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Link, Stack, router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import { ThemedView } from '@/components/themed-view';
 
 import { supabase } from '../utils/supabase';
 
@@ -28,6 +29,31 @@ export default function RegistroForaScreen() {
   const [loading, setLoading] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [mostrarConfirmarSenha, setMostrarConfirmarSenha] = useState(false);
+  const [fotoLocal, setFotoLocal] = useState<ImagePicker.ImagePickerAsset | null>(null);
+
+  const extensaoDoMime = (mime: string | null | undefined) => {
+    if (!mime) return 'jpg';
+    const partes = mime.split('/');
+    return partes[1] || 'jpg';
+  };
+
+  const escolherFoto = async () => {
+    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissao.granted) {
+      Alert.alert('Permissão negada', 'Precisamos de acesso às suas fotos.');
+      return;
+    }
+
+    const resultado = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 1,
+    });
+
+    if (!resultado.canceled) {
+      setFotoLocal(resultado.assets[0]);
+    }
+  };
 
   const handleRegistro = async () => {
     if (!form.nome || !form.email || !form.senha || !form.confirmarSenha) {
@@ -73,12 +99,37 @@ export default function RegistroForaScreen() {
         return;
       }
 
-      // Cria o registro na tabela de usuários externos (não-petianos)
       if (data.user) {
+        let avatarUrl: string | null = null;
+
+        // Se escolheu uma foto, faz o upload antes de criar o registro
+        if (fotoLocal) {
+          try {
+            const resposta = await fetch(fotoLocal.uri);
+            const blob = await resposta.blob();
+            const extensao = extensaoDoMime(fotoLocal.mimeType);
+            const caminho = `${data.user.id}/${Date.now()}.${extensao}`;
+
+            const { error: erroUpload } = await supabase.storage
+              .from('avatars')
+              .upload(caminho, blob, { contentType: fotoLocal.mimeType || 'image/jpeg' });
+
+            if (!erroUpload) {
+              const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(caminho);
+              avatarUrl = urlData.publicUrl;
+            } else {
+              console.error('Erro ao enviar foto de perfil:', erroUpload);
+            }
+          } catch (erroFoto) {
+            console.error('Erro ao processar foto:', erroFoto);
+          }
+        }
+
         const { error: erroExterno } = await supabase.from('usuarios_externos').insert({
           id: data.user.id,
           nome: form.nome,
           email: form.email,
+          avatar_url: avatarUrl,
         });
 
         if (erroExterno) {
@@ -139,6 +190,22 @@ export default function RegistroForaScreen() {
               </View>
 
               <View style={styles.formContainer}>
+                {/* --- FOTO DE PERFIL (opcional) --- */}
+                <View style={styles.fotoContainer}>
+                  <TouchableOpacity onPress={escolherFoto} style={styles.fotoPicker}>
+                    {fotoLocal ? (
+                      <Image source={{ uri: fotoLocal.uri }} style={styles.fotoPreview} />
+                    ) : (
+                      <View style={styles.fotoPlaceholder}>
+                        <Text style={styles.fotoPlaceholderText}>📷</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                  <Text style={styles.fotoLabel}>
+                    {fotoLocal ? 'Trocar foto de perfil' : 'Adicionar foto de perfil (opcional)'}
+                  </Text>
+                </View>
+
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Nome Completo</Text>
                   <TextInput
@@ -242,6 +309,24 @@ const styles = StyleSheet.create({
   title: { color: '#FFFFFF', fontSize: 26, fontWeight: 'bold', marginBottom: 4 },
   subtitle: { color: '#999', fontSize: 14, textAlign: 'center', paddingHorizontal: 10 },
   formContainer: { flex: 1 },
+
+  fotoContainer: { alignItems: 'center', marginBottom: 22 },
+  fotoPicker: { marginBottom: 8 },
+  fotoPreview: { width: 90, height: 90, borderRadius: 45, borderWidth: 2, borderColor: '#F0502D' },
+  fotoPlaceholder: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: '#1c1d2b',
+    borderWidth: 1,
+    borderColor: '#2a2b3d',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fotoPlaceholderText: { fontSize: 28 },
+  fotoLabel: { color: '#F0502D', fontSize: 13, fontWeight: '600' },
+
   inputGroup: { marginBottom: 16 },
   label: { color: '#CCCCCC', fontSize: 14, fontWeight: '500', marginBottom: 6 },
   input: {
