@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import Svg, { Path, Circle } from 'react-native-svg';
-
 import { ThemedView } from '@/components/themed-view';
+import { useAppAlert } from '@/components/app-alert';
+
 import { supabase } from '../utils/supabase';
 
 const BackIconSvg = () => (
@@ -37,6 +38,7 @@ interface MeuProjeto {
 }
 
 export default function MeusProjetosScreen() {
+  const { mostrarAlerta } = useAppAlert();
   const [carregando, setCarregando] = useState(true);
   const [projetos, setProjetos] = useState<MeuProjeto[]>([]);
 
@@ -60,7 +62,7 @@ export default function MeusProjetosScreen() {
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session?.user) {
-      Alert.alert('Erro', 'Você precisa estar logado.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Você precisa estar logado.', tipo: 'erro' });
       router.replace('/login');
       return;
     }

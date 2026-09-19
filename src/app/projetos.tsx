@@ -7,8 +7,6 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
-  Alert,
-  Platform,
   Linking,
   TextInput,
 } from 'react-native';
@@ -19,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 
 import { ThemedView } from '@/components/themed-view';
+import { useAppAlert } from '@/components/app-alert';
 import { supabase } from '../utils/supabase';
 
 // --- ÍCONES ---
@@ -146,16 +145,6 @@ interface PetianoSimples {
 
 const ANOS = [2023, 2024, 2025, 2026];
 
-// Mostra um aviso que funciona tanto na web quanto no celular
-// (Alert.alert sozinho não exibe nada no navegador)
-const mostrarAlerta = (titulo: string, mensagem: string) => {
-  if (Platform.OS === 'web') {
-    window.alert(`${titulo}\n\n${mensagem}`);
-  } else {
-    Alert.alert(titulo, mensagem);
-  }
-};
-
 const formatarDataHoraAtividade = (iso: string | null) => {
   if (!iso) return '';
   const data = new Date(iso);
@@ -234,6 +223,7 @@ const pesoDoTipo = (tipo: string) => {
 };
 
 export default function ProjetosScreen() {
+  const { mostrarAlerta, mostrarConfirmacao } = useAppAlert();
   const params = useLocalSearchParams<{ projeto?: string; ano?: string }>();
 
   const [carregandoSessao, setCarregandoSessao] = useState(true);
@@ -375,14 +365,10 @@ export default function ProjetosScreen() {
     router.push('/');
   };
 
-  // IMPORTANTE: allowsEditing fica DESLIGADO de propósito. A tela de corte
-  // do ImagePicker (principalmente na web) reprocessa a imagem via canvas e
-  // reexporta em JPEG comprimido, causando perda de qualidade visível.
-  // Sem o corte, o arquivo original é enviado exatamente como foi escolhido.
   const escolherImagemProjeto = async () => {
     const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissao.granted) {
-      mostrarAlerta('Permissão negada', 'Precisamos de acesso às suas fotos.');
+      mostrarAlerta({ titulo: 'Permissão negada', mensagem: 'Precisamos de acesso às suas fotos.', tipo: 'erro' });
       return;
     }
 
@@ -400,7 +386,7 @@ export default function ProjetosScreen() {
   const escolherImagemAtividade = async () => {
     const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissao.granted) {
-      mostrarAlerta('Permissão negada', 'Precisamos de acesso às suas fotos.');
+      mostrarAlerta({ titulo: 'Permissão negada', mensagem: 'Precisamos de acesso às suas fotos.', tipo: 'erro' });
       return;
     }
 
@@ -424,7 +410,7 @@ export default function ProjetosScreen() {
   // --- CRIAR PROJETO (temporário, remover quando todos os projetos reais forem cadastrados) ---
   const criarProjeto = async () => {
     if (!novoTitulo.trim()) {
-      mostrarAlerta('Erro', 'Digite o título do projeto.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Digite o título do projeto.', tipo: 'erro' });
       return;
     }
 
@@ -490,7 +476,7 @@ export default function ProjetosScreen() {
       buscarProjetos(anoSelecionado);
     } catch (error: any) {
       console.error(error);
-      mostrarAlerta('Erro', error.message || 'Não foi possível criar o projeto.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: error.message || 'Não foi possível criar o projeto.', tipo: 'erro' });
     } finally {
       setEnviandoProjeto(false);
     }
@@ -544,7 +530,7 @@ export default function ProjetosScreen() {
     });
 
     if (error) {
-      mostrarAlerta('Erro', 'Não foi possível entrar no projeto.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Não foi possível entrar no projeto.', tipo: 'erro' });
       return;
     }
 
@@ -561,7 +547,7 @@ export default function ProjetosScreen() {
       .eq('projeto_uuid', projetoSelecionado.uuid);
 
     if (error) {
-      mostrarAlerta('Erro', 'Não foi possível sair do projeto.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Não foi possível sair do projeto.', tipo: 'erro' });
       return;
     }
 
@@ -570,18 +556,18 @@ export default function ProjetosScreen() {
 
   const criarAtividade = async () => {
     if (!atividadeTitulo.trim() || !projetoSelecionado) {
-      mostrarAlerta('Erro', 'Digite o título da atividade.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Digite o título da atividade.', tipo: 'erro' });
       return;
     }
 
     if (!atividadeData.trim() || !atividadeHora.trim()) {
-      mostrarAlerta('Erro', 'Preencha a data e a hora da atividade.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Preencha a data e a hora da atividade.', tipo: 'erro' });
       return;
     }
 
     const dataHora = parseDataHora(atividadeData, atividadeHora);
     if (!dataHora) {
-      mostrarAlerta('Erro', 'Data ou hora inválida. Use o formato DD/MM/AAAA e HH:MM.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Data ou hora inválida. Use o formato DD/MM/AAAA e HH:MM.', tipo: 'erro' });
       return;
     }
 
@@ -626,7 +612,7 @@ export default function ProjetosScreen() {
       selecionarProjeto(projetoSelecionado);
     } catch (error: any) {
       console.error(error);
-      mostrarAlerta('Erro', error.message || 'Não foi possível criar a atividade.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: error.message || 'Não foi possível criar a atividade.', tipo: 'erro' });
     } finally {
       setEnviandoAtividade(false);
     }
@@ -640,7 +626,7 @@ export default function ProjetosScreen() {
 
     if (error) {
       console.error('Erro ao marcar concluída:', error);
-      mostrarAlerta('Erro', `Não foi possível marcar como concluída.\n\nDetalhe: ${error.message}`);
+      mostrarAlerta({ titulo: 'Erro', mensagem: `Não foi possível marcar como concluída.\n\nDetalhe: ${error.message}`, tipo: 'erro' });
       return;
     }
 
@@ -650,7 +636,7 @@ export default function ProjetosScreen() {
   const confirmarReagendamento = async (atividade: Atividade) => {
     const dataHora = parseDataHora(reagendarData, reagendarHora);
     if (!dataHora) {
-      mostrarAlerta('Erro', 'Data ou hora inválida. Use o formato DD/MM/AAAA e HH:MM.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Data ou hora inválida. Use o formato DD/MM/AAAA e HH:MM.', tipo: 'erro' });
       return;
     }
 
@@ -661,7 +647,7 @@ export default function ProjetosScreen() {
 
     if (error) {
       console.error('Erro ao adiar atividade:', error);
-      mostrarAlerta('Erro', `Não foi possível adiar a atividade.\n\nDetalhe: ${error.message}`);
+      mostrarAlerta({ titulo: 'Erro', mensagem: `Não foi possível adiar a atividade.\n\nDetalhe: ${error.message}`, tipo: 'erro' });
       return;
     }
 
@@ -671,25 +657,13 @@ export default function ProjetosScreen() {
     if (projetoSelecionado) selecionarProjeto(projetoSelecionado);
   };
 
-  const confirmarAcao = (mensagem: string): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (Platform.OS === 'web') {
-        resolve(window.confirm(mensagem));
-      } else {
-        Alert.alert(
-          'Confirmar',
-          mensagem,
-          [
-            { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Excluir', style: 'destructive', onPress: () => resolve(true) },
-          ]
-        );
-      }
-    });
-  };
-
   const excluirAtividade = async (atividade: Atividade) => {
-    const confirmado = await confirmarAcao('Tem certeza que deseja excluir esta atividade?');
+    const confirmado = await mostrarConfirmacao({
+      titulo: 'Excluir atividade',
+      mensagem: 'Tem certeza que deseja excluir esta atividade?',
+      textoConfirmar: 'Excluir',
+      destrutivo: true,
+    });
     if (!confirmado) return;
 
     try {
@@ -710,7 +684,7 @@ export default function ProjetosScreen() {
       if (projetoSelecionado) selecionarProjeto(projetoSelecionado);
     } catch (error: any) {
       console.error('Erro ao excluir atividade:', error);
-      mostrarAlerta('Erro', `Não foi possível excluir a atividade.\n\nDetalhe: ${error.message}`);
+      mostrarAlerta({ titulo: 'Erro', mensagem: `Não foi possível excluir a atividade.\n\nDetalhe: ${error.message}`, tipo: 'erro' });
     }
   };
 
@@ -745,10 +719,10 @@ export default function ProjetosScreen() {
       if (erroUpsert) throw erroUpsert;
 
       setPlanejamentoUrl(urlData.publicUrl);
-      mostrarAlerta('Sucesso', 'Planejamento enviado com sucesso!');
+      mostrarAlerta({ titulo: 'Sucesso', mensagem: 'Planejamento enviado com sucesso!', tipo: 'sucesso' });
     } catch (error: any) {
       console.error(error);
-      mostrarAlerta('Erro', error.message || 'Não foi possível enviar o planejamento.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: error.message || 'Não foi possível enviar o planejamento.', tipo: 'erro' });
     } finally {
       setEnviandoPlanejamento(false);
     }
@@ -757,9 +731,12 @@ export default function ProjetosScreen() {
   const excluirProjeto = async () => {
     if (!projetoSelecionado) return;
 
-    const confirmado = await confirmarAcao(
-      'Tem certeza que deseja excluir este projeto? Essa ação não pode ser desfeita.'
-    );
+    const confirmado = await mostrarConfirmacao({
+      titulo: 'Excluir projeto',
+      mensagem: 'Tem certeza que deseja excluir este projeto? Essa ação não pode ser desfeita.',
+      textoConfirmar: 'Excluir',
+      destrutivo: true,
+    });
     if (!confirmado) return;
 
     try {
@@ -780,12 +757,12 @@ export default function ProjetosScreen() {
       buscarProjetos(anoSelecionado);
     } catch (error: any) {
       console.error(error);
-      mostrarAlerta('Erro', 'Não foi possível excluir o projeto.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Não foi possível excluir o projeto.', tipo: 'erro' });
     }
   };
 
   const abrirLink = (url: string) => {
-    Linking.openURL(url).catch(() => mostrarAlerta('Erro', 'Não foi possível abrir o arquivo.'));
+    Linking.openURL(url).catch(() => mostrarAlerta({ titulo: 'Erro', mensagem: 'Não foi possível abrir o arquivo.', tipo: 'erro' }));
   };
 
   if (carregandoSessao) {
@@ -1111,8 +1088,6 @@ export default function ProjetosScreen() {
                   <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 20 }} />
                 ) : (
                   <>
-                    {/* O Tutor está em todo projeto automaticamente — não faz sentido
-                        entrar/sair via botão, então esse bloco fica escondido pra ele */}
                     {!souTutor && (
                       !logado ? (
                         <TouchableOpacity style={styles.participarBtn} onPress={() => router.push('/login')}>

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as Device from 'expo-device';
-import { Platform, StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Modal, Alert, Animated, Easing, Linking, ActivityIndicator } from 'react-native';
+import { Platform, StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Modal, Animated, Easing, Linking, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Link, Stack, router,  type Href } from 'expo-router';
+import { Link, Stack, router } from 'expo-router';
 import Svg, { Path, Rect, Circle } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAppAlert } from '@/components/app-alert';
 
 // Supabase
 import { supabase } from '../utils/supabase';
@@ -260,43 +261,6 @@ const StatLivesIconSvg = () => (
   </Svg>
 );
 
-// --- LINK DO FOOTER COM HOVER (fica laranja e sublinha ao passar o mouse) ---
-const FooterLink = ({
-  href,
-  onPress,
-  children,
-}: {
-  href?: Href;
-  onPress?: () => void;
-  children: string;
-}) => {
-  const [hover, setHover] = useState(false);
-
-  const textStyle = [styles.footerLink, hover && styles.footerLinkHover];
-
-  const content = (
-    <TouchableOpacity
-      onPress={onPress}
-      // @ts-ignore - eventos de mouse funcionam via react-native-web
-      onMouseEnter={() => setHover(true)}
-      // @ts-ignore
-      onMouseLeave={() => setHover(false)}
-    >
-      <Text style={textStyle}>{children}</Text>
-    </TouchableOpacity>
-  );
-
-  if (href) {
-    return (
-      <Link href={href} asChild>
-        {content}
-      </Link>
-    );
-  }
-
-  return content;
-};
-
 // --- TIPO: PETIANO VINDO DO SUPABASE ---
 interface Petiano {
   id: string;
@@ -307,7 +271,7 @@ interface Petiano {
   sobre: string | null;
 }
 
-// --- TIPO: PROJETO (agora vindo de verdade da tabela "projeto") ---
+// --- TIPO: PROJETO (vindo de verdade da tabela "projeto") ---
 interface Projeto {
   uuid: string;
   titulo: string;
@@ -368,6 +332,7 @@ const ESTATISTICAS: Estatistica[] = [
 ];
 
 export default function HomeScreen() {
+  const { mostrarAlerta } = useAppAlert();
   const anoAtual = new Date().getFullYear();
 
   const [menuAberto, setMenuAberto] = useState(false);
@@ -441,7 +406,7 @@ export default function HomeScreen() {
     setCarregandoPerfis(false);
   };
 
-  // Sempre busca os projetos do ano ATUAL (calculado na hora, nunca fixo em 2026)
+  // Sempre busca os projetos do ano ATUAL (calculado na hora, nunca fixo)
   const buscarProjetosAtuais = async () => {
     setCarregandoProjetosAtuais(true);
     const anoDeAgora = new Date().getFullYear();
@@ -487,12 +452,7 @@ export default function HomeScreen() {
     await supabase.auth.signOut();
     setUserMenuAberto(false);
     setMenuAberto(false);
-
-    if (Platform.OS === 'web') {
-      window.alert('Você saiu da conta.');
-    } else {
-      Alert.alert('Sucesso', 'Você saiu da conta.');
-    }
+    mostrarAlerta({ titulo: 'Você saiu da conta', tipo: 'sucesso' });
   };
 
   const handleUserIconPress = () => {
@@ -505,11 +465,7 @@ export default function HomeScreen() {
 
   const abrirLink = (url: string) => {
     Linking.openURL(url).catch(() => {
-      if (Platform.OS === 'web') {
-        window.alert('Não foi possível abrir o link.');
-      } else {
-        Alert.alert('Erro', 'Não foi possível abrir o link.');
-      }
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Não foi possível abrir o link.', tipo: 'erro' });
     });
   };
 
@@ -901,7 +857,6 @@ export default function HomeScreen() {
             </View>
 
             {/* --- SEÇÃO: PROJETOS ATUAIS EM ANDAMENTO --- */}
-            {/* Sempre puxa os projetos do ano ATUAL (calculado dinamicamente), nunca fixo em 2026 */}
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>
                 Projetos Atuais em Andamento<Text style={styles.orangeHighlight}>.</Text>
@@ -934,11 +889,14 @@ export default function HomeScreen() {
                     ))}
                   </View>
 
-                  <Link href="/projetos" asChild>
-                    <TouchableOpacity style={StyleSheet.flatten([styles.btnSecondary, { marginTop: 24 }])}>
-                      <Text style={styles.btnSecondaryText}>Ver todos os projetos</Text>
-                    </TouchableOpacity>
-                  </Link>
+                  {/* Wrapper com View evita passar array de estilos direto pro filho do Link (Slot) */}
+                  <View style={styles.verTodosWrapper}>
+                    <Link href="/projetos" asChild>
+                      <TouchableOpacity style={styles.btnSecondary}>
+                        <Text style={styles.btnSecondaryText}>Ver todos os projetos</Text>
+                      </TouchableOpacity>
+                    </Link>
+                  </View>
                 </>
               ) : (
                 <View style={styles.projetosEmptyState}>
@@ -1055,39 +1013,41 @@ export default function HomeScreen() {
                   <Text style={styles.footerTitle}>PET Fronteira</Text>
                   <Text style={styles.footerText}>UFMS Universidade Federal de Mato Grosso do Sul</Text>
                   <Text style={styles.footerText}>Campus de Ponta Porã</Text>
+
+                  
                 </View>
 
                 <View style={styles.footerSection}>
                   <Text style={styles.footerTitle}>Links Rápidos</Text>
-                  <FooterLink href="/sobre">Sobre</FooterLink>
-                  <FooterLink href="/projetos">Projetos</FooterLink>
-                  <FooterLink href="/eventos">Eventos</FooterLink>
-                  <FooterLink href="/contato">Contato</FooterLink>
+                  <Link href="/sobre" style={styles.footerLink}>Sobre</Link>
+                  <Link href="/projetos" style={styles.footerLink}>Projetos</Link>
+                  <Link href="/eventos" style={styles.footerLink}>Eventos</Link>
+                  <Link href="/contato" style={styles.footerLink}>Contato</Link>
                 </View>
 
                 <View style={styles.footerSection}>
                   <Text style={styles.footerTitle}>Úteis</Text>
-                  <FooterLink onPress={() => abrirLink('https://prograd.ufms.br/calendario-academico/')}>
-                    Calendário Acadêmico
-                  </FooterLink>
-                  <FooterLink onPress={() => abrirLink('https://sigproj.ufms.br/')}>
-                    SIGPROJ
-                  </FooterLink>
-                  <FooterLink onPress={() => abrirLink('https://siscad.ufms.br/')}>
-                    SISCAD
-                  </FooterLink>
-                  <FooterLink onPress={() => abrirLink('https://ava.ufms.br/')}>
-                    AVA
-                  </FooterLink>
-                  <FooterLink onPress={() => abrirLink('https://prograd.ufms.br/programas-e-projetos/programa-de-educacao-tutorial-pet/')}>
-                    Pets UFMS
-                  </FooterLink>
-                  <FooterLink onPress={() => abrirLink('https://www.ufms.br/')}>
-                    UFMS
-                  </FooterLink>
-                  <FooterLink onPress={() => abrirLink('https://cppp.ufms.br/')}>
-                    Campus Ponta Porã
-                  </FooterLink>
+                  <TouchableOpacity onPress={() => abrirLink('https://prograd.ufms.br/calendario-academico/')}>
+                    <Text style={styles.footerLink}>Calendário Acadêmico</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => abrirLink('https://sigproj.ufms.br/')}>
+                    <Text style={styles.footerLink}>SIGPROJ</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => abrirLink('https://siscad.ufms.br/')}>
+                    <Text style={styles.footerLink}>SISCAD</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => abrirLink('https://ava.ufms.br/')}>
+                    <Text style={styles.footerLink}>AVA</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => abrirLink('https://prograd.ufms.br/programas-e-projetos/programa-de-educacao-tutorial-pet/')}>
+                    <Text style={styles.footerLink}>Pets UFMS</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => abrirLink('https://www.ufms.br/')}>
+                    <Text style={styles.footerLink}>UFMS</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => abrirLink('https://cppp.ufms.br/')}>
+                    <Text style={styles.footerLink}>Campus Ponta Porã</Text>
+                  </TouchableOpacity>
                 </View>
 
                 <View style={styles.footerSection}>
@@ -1101,6 +1061,7 @@ export default function HomeScreen() {
                     >
                       <FacebookIconSvg size={22} />
                     </TouchableOpacity>
+                    
 
                     {/* Instagram */}
                     <TouchableOpacity
@@ -1110,9 +1071,9 @@ export default function HomeScreen() {
                       <InstagramIconSvg size={22} />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.footerPhoneRow} onPress={() => abrirLink(TELEFONE_LINK)}>
-                      <PhoneIconSvg size={14} />
-                      <Text style={styles.footerPhoneText}>{TELEFONE_DISPLAY}</Text>
-                    </TouchableOpacity>
+                    <PhoneIconSvg size={14} />
+                    <Text style={styles.footerPhoneText}>{TELEFONE_DISPLAY}</Text>
+                  </TouchableOpacity>
                   </View>
                 </View>
               </View>
@@ -1322,6 +1283,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 500,
   },
+  verTodosWrapper: { marginTop: 24 },
 
   // --- ESTATÍSTICAS ---
   statsSection: { paddingVertical: 35 },
@@ -1394,19 +1356,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 56,
     left: 0,
-    width: 370,
-    maxWidth: 400,
+    width: 340,
+    maxWidth: 360,
     borderRadius: 12,
     overflow: 'hidden',
   },
 
-  footer: { backgroundColor: '#1c1d2b', borderTopWidth: 3, borderTopColor: '#F0502D', paddingVertical: 24, paddingHorizontal: 18 },
+  footer: { backgroundColor: '#1c1d2b', borderTopWidth: 3, borderTopColor: '#F0502D', paddingVertical: 20, paddingHorizontal: 15 },
   footerContent: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 15, marginBottom: 20 },
   footerSection: { flex: 1, minWidth: 140 },
   footerTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginBottom: 10, borderBottomWidth: 2, borderBottomColor: '#F0502D', paddingBottom: 5 },
   footerText: { color: '#CCCCCC', fontSize: 13, marginBottom: 5, lineHeight: 18 },
-  footerLink: { color: '#F0502D', fontSize: 13, marginBottom: 6, lineHeight: 18 },
-  footerLinkHover: { color: '#FF7A50', textDecorationLine: 'underline' },
+  footerLink: { color: '#CCCCCC', fontSize: 13, marginBottom: 6, lineHeight: 18 },
   footerPhoneRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
   footerPhoneText: { color: '#F0502D', fontSize: 13, fontWeight: 'bold' },
   socialLinks: { gap: 6 },

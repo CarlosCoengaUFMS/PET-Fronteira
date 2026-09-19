@@ -7,8 +7,6 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
-  Alert,
-  Platform,
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +15,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 
 import { ThemedView } from '@/components/themed-view';
+import { useAppAlert } from '@/components/app-alert';
 import { supabase } from '../utils/supabase';
 
 // --- ÍCONES ---
@@ -117,6 +116,8 @@ const extrairCaminhoStorage = (url: string) => {
 const GRUPOS_CARGO = ['Petiano Bolsista', 'Petiano', 'Petiano auxiliar'];
 
 export default function RelatoriosScreen() {
+  const { mostrarAlerta, mostrarConfirmacao } = useAppAlert();
+
   const [carregandoSessao, setCarregandoSessao] = useState(true);
   const [logado, setLogado] = useState(false);
   const [usuarioId, setUsuarioId] = useState<string | null>(null);
@@ -214,13 +215,12 @@ export default function RelatoriosScreen() {
 
     if (error) {
       console.error('Erro ao salvar visibilidade:', error);
-      Alert.alert('Erro', 'Não foi possível salvar essa configuração.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Não foi possível salvar essa configuração.', tipo: 'erro' });
     } else {
       const atualizado = { ...petianoSelecionado, visibilidade_relatorios: novoValor };
       setPetianoSelecionado(atualizado);
       setPetianos((atual) => atual.map((p) => (p.id === atualizado.id ? atualizado : p)));
 
-      // se acabou de ficar visível pro viewer atual, já carrega a lista
       if (podeVer(atualizado) && relatorios.length === 0) {
         abrirPetiano(atualizado);
       }
@@ -262,7 +262,7 @@ export default function RelatoriosScreen() {
       arquivo.name.toLowerCase().endsWith('.pdf');
 
     if (!ehPdf) {
-      Alert.alert('Arquivo inválido', 'Só é permitido enviar arquivos em PDF.');
+      mostrarAlerta({ titulo: 'Arquivo inválido', mensagem: 'Só é permitido enviar arquivos em PDF.', tipo: 'erro' });
       return;
     }
 
@@ -298,38 +298,22 @@ export default function RelatoriosScreen() {
         abrirPetiano(petianoSelecionado);
       }
 
-      if (Platform.OS === 'web') {
-        window.alert('Relatório enviado com sucesso!');
-      } else {
-        Alert.alert('Sucesso', 'Relatório enviado com sucesso!');
-      }
+      mostrarAlerta({ titulo: 'Sucesso', mensagem: 'Relatório enviado com sucesso!', tipo: 'sucesso' });
     } catch (error: any) {
       console.error(error);
-      Alert.alert('Erro ao enviar', error.message || 'Falha ao conectar com o servidor.');
+      mostrarAlerta({ titulo: 'Erro ao enviar', mensagem: error.message || 'Falha ao conectar com o servidor.', tipo: 'erro' });
     } finally {
       setEnviando(false);
     }
   };
 
-  const confirmarExclusao = (): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (Platform.OS === 'web') {
-        resolve(window.confirm('Tem certeza que deseja excluir este relatório?'));
-      } else {
-        Alert.alert(
-          'Excluir relatório',
-          'Tem certeza que deseja excluir este relatório?',
-          [
-            { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Excluir', style: 'destructive', onPress: () => resolve(true) },
-          ]
-        );
-      }
-    });
-  };
-
   const excluirRelatorio = async (relatorio: Relatorio) => {
-    const confirmado = await confirmarExclusao();
+    const confirmado = await mostrarConfirmacao({
+      titulo: 'Excluir relatório',
+      mensagem: 'Tem certeza que deseja excluir este relatório?',
+      textoConfirmar: 'Excluir',
+      destrutivo: true,
+    });
     if (!confirmado) return;
 
     try {
@@ -344,13 +328,13 @@ export default function RelatoriosScreen() {
       setRelatorios((atual) => atual.filter((r) => r.uuid !== relatorio.uuid));
     } catch (error: any) {
       console.error(error);
-      Alert.alert('Erro', 'Não foi possível excluir o relatório.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Não foi possível excluir o relatório.', tipo: 'erro' });
     }
   };
 
   const abrirArquivo = (url: string) => {
     Linking.openURL(url).catch(() => {
-      Alert.alert('Erro', 'Não foi possível abrir o arquivo.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Não foi possível abrir o arquivo.', tipo: 'erro' });
     });
   };
 

@@ -9,15 +9,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
   Image,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, Stack, router } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
+import { useAppAlert } from '@/components/app-alert';
 
 export default function LoginScreen() {
+  const { mostrarAlerta } = useAppAlert();
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,12 +26,12 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email || !senha) {
-      Alert.alert('Erro', 'Por favor, preencha todos os campos');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Por favor, preencha todos os campos', tipo: 'erro' });
       return;
     }
 
     if (!email.includes('@')) {
-      Alert.alert('Erro', 'Por favor, insira um e-mail válido');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Por favor, insira um e-mail válido', tipo: 'erro' });
       return;
     }
 
@@ -43,13 +44,13 @@ export default function LoginScreen() {
       });
 
       if (error) {
-        Alert.alert('Erro no Login', error.message);
+        mostrarAlerta({ titulo: 'Erro no Login', mensagem: error.message, tipo: 'erro' });
       } else {
-        Alert.alert('Sucesso', 'Login realizado com sucesso!');
+        mostrarAlerta({ titulo: 'Sucesso', mensagem: 'Login realizado com sucesso!', tipo: 'sucesso' });
         router.replace('/');
       }
     } catch (error) {
-      Alert.alert('Erro', 'Falha ao conectar. Tente novamente.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Falha ao conectar. Tente novamente.', tipo: 'erro' });
     } finally {
       setLoading(false);
     }
@@ -132,7 +133,7 @@ export default function LoginScreen() {
 
                 <TouchableOpacity 
                   style={styles.forgotPassword}
-                  onPress={() => Alert.alert('Recuperar Senha', 'Funcionalidade em desenvolvimento')}
+                  onPress={() => mostrarAlerta({ titulo: 'Recuperar Senha', mensagem: 'Funcionalidade em desenvolvimento', tipo: 'info' })}
                 >
                   <Text style={styles.forgotPasswordText}>Esqueceu a senha?</Text>
                 </TouchableOpacity>
@@ -150,7 +151,6 @@ export default function LoginScreen() {
                 </TouchableOpacity>
 
                 {/* --- OPÇÕES DE CADASTRO --- */}
-                {/* O cadastro de petianos será restrito futuramente; por enquanto os dois convivem aqui */}
                 <View style={styles.registerOptionsContainer}>
                   <Text style={styles.registerOptionsLabel}>Não tem uma conta?</Text>
 

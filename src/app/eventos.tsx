@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, ActivityIndicator, TextInput, Alert, Platform } from 'react-native';
+import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import Svg, { Path, Rect, Circle } from 'react-native-svg';
 
 import { ThemedView } from '@/components/themed-view';
+import { useAppAlert } from '@/components/app-alert';
 import { supabase } from '../utils/supabase';
 
 // --- ÍCONES ---
@@ -124,6 +125,8 @@ const formatarDataComentario = (iso: string) => {
 };
 
 export default function EventosScreen() {
+  const { mostrarAlerta, mostrarConfirmacao } = useAppAlert();
+
   const hoje = new Date();
   const [mesAtual, setMesAtual] = useState(hoje.getMonth());
   const [anoAtual, setAnoAtual] = useState(hoje.getFullYear());
@@ -152,10 +155,6 @@ export default function EventosScreen() {
     buscarAtividades();
   }, []);
 
-  // Foca o campo de resposta manualmente assim que ele aparece na tela.
-  // O autoFocus do TextInput não é confiável no React Native Web quando
-  // o campo é montado depois de um clique (o navegador bloqueia o foco
-  // automático fora do gesto direto), então usamos um ref + focus().
   useEffect(() => {
     if (respondendoUuid) {
       const id = setTimeout(() => {
@@ -171,8 +170,6 @@ export default function EventosScreen() {
       setLogado(true);
       setUsuarioId(session.user.id);
 
-      // Qualquer usuário com linha em "petianos" (independente do cargo)
-      // pode moderar comentários de qualquer pessoa
       const { data: petiano } = await supabase
         .from('petianos')
         .select('id')
@@ -232,7 +229,6 @@ export default function EventosScreen() {
     }
   };
 
-  // Gera a grade de dias do mês (começando na segunda-feira)
   const gerarDiasDoMes = () => {
     const primeiroDia = new Date(anoAtual, mesAtual, 1);
     const ultimoDia = new Date(anoAtual, mesAtual + 1, 0);
@@ -271,7 +267,6 @@ export default function EventosScreen() {
     );
   };
 
-  // Dias do mês exibido que têm pelo menos uma atividade agendada
   const diasComEvento = new Set<number>();
   atividades.forEach((atividade) => {
     const data = new Date(atividade.data_inicio);
@@ -293,7 +288,6 @@ export default function EventosScreen() {
       let infoPorId: Record<string, { nome: string; avatar_url: string | null }> = {};
 
       if (autorIds.length > 0) {
-        // 1º: procura o nome/foto entre os petianos
         const { data: petianosData } = await supabase
           .from('petianos')
           .select('id, nome, avatar_url')
@@ -303,8 +297,6 @@ export default function EventosScreen() {
           infoPorId[p.id] = { nome: p.nome, avatar_url: p.avatar_url };
         });
 
-        // 2º: quem não é petiano, procura entre os usuários externos (visitantes),
-        // que também têm nome e avatar_url próprios
         const idsRestantes = autorIds.filter((id) => !infoPorId[id]);
         if (idsRestantes.length > 0) {
           const { data: externosData } = await supabase
@@ -356,7 +348,7 @@ export default function EventosScreen() {
 
     if (error) {
       console.error('Erro ao enviar comentário:', error);
-      Alert.alert('Erro', 'Não foi possível enviar o comentário.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Não foi possível enviar o comentário.', tipo: 'erro' });
     } else {
       setNovoComentario('');
       await buscarComentarios(atividadeUuid);
@@ -377,7 +369,7 @@ export default function EventosScreen() {
 
     if (error) {
       console.error('Erro ao enviar resposta:', error);
-      Alert.alert('Erro', 'Não foi possível enviar a resposta.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Não foi possível enviar a resposta.', tipo: 'erro' });
     } else {
       setTextoResposta('');
       setRespondendoUuid(null);
@@ -386,25 +378,13 @@ export default function EventosScreen() {
     setEnviandoResposta(false);
   };
 
-  const confirmarExclusao = (): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (Platform.OS === 'web') {
-        resolve(window.confirm('Tem certeza que deseja excluir este comentário?'));
-      } else {
-        Alert.alert(
-          'Excluir comentário',
-          'Tem certeza que deseja excluir este comentário?',
-          [
-            { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Excluir', style: 'destructive', onPress: () => resolve(true) },
-          ]
-        );
-      }
-    });
-  };
-
   const excluirComentario = async (comentario: Comentario) => {
-    const confirmado = await confirmarExclusao();
+    const confirmado = await mostrarConfirmacao({
+      titulo: 'Excluir comentário',
+      mensagem: 'Tem certeza que deseja excluir este comentário?',
+      textoConfirmar: 'Excluir',
+      destrutivo: true,
+    });
     if (!confirmado) return;
 
     const { error } = await supabase.from('comentarios_atividade').delete().eq('uuid', comentario.uuid);
@@ -412,11 +392,10 @@ export default function EventosScreen() {
       await buscarComentarios(comentario.atividade_uuid);
     } else {
       console.error('Erro ao excluir comentário:', error);
-      Alert.alert('Erro', 'Não foi possível excluir o comentário.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Não foi possível excluir o comentário.', tipo: 'erro' });
     }
   };
 
-  // Pode excluir se for o autor OU se for qualquer petiano (moderação)
   const podeExcluirComentario = (comentario: Comentario) => {
     return comentario.autor_id === usuarioId || souPetiano;
   };
@@ -637,7 +616,6 @@ export default function EventosScreen() {
                                           </View>
                                         )}
 
-                                        {/* --- RESPOSTAS DESTE COMENTÁRIO --- */}
                                         {(respostasPorPai[comentario.uuid] || []).map((resposta) => (
                                           <View key={resposta.uuid} style={styles.respostaItem}>
                                             {resposta.autor_avatar ? (
@@ -742,7 +720,6 @@ const styles = StyleSheet.create({
 
   emptyText: { color: '#666', fontSize: 14, textAlign: 'center', lineHeight: 21 },
 
-  // --- CALENDÁRIO ---
   calendarSection: { padding: 20, maxWidth: 420, width: '100%', alignSelf: 'center' },
   calendarHeaderRow: { marginBottom: 16 },
   calendarTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold', marginBottom: 12 },
@@ -788,7 +765,6 @@ const styles = StyleSheet.create({
   calendarDayText: { color: '#CCCCCC', fontSize: 12 },
   calendarDayTextToday: { color: '#FFFFFF', fontWeight: 'bold' },
 
-  // --- LISTA DE EVENTOS ---
   eventosSection: { paddingHorizontal: 20, paddingTop: 10 },
   eventosLista: { gap: 18 },
   eventoCard: {

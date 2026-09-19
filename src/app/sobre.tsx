@@ -14,7 +14,7 @@ export default function SobreScreen() {
       </View>
       <View style={styles.content}>
         <Text style={styles.text}>
-          O PT Fronteira do Campus de Ponta Porã é uma organização política que atua na defesa dos direitos dos trabalhadores, estudantes e moradores da região de fronteira entre Brasil e Paraguai. Nossa missão é promover a justiça social, a educação pública de qualidade, a cultura e o desenvolvimento sustentável.
+          O PET Fronteira do Campus de Ponta Porã é uma organização política que atua na defesa dos direitos dos trabalhadores, estudantes e moradores da região de fronteira entre Brasil e Paraguai. Nossa missão é promover a justiça social, a educação pública de qualidade, a cultura e o desenvolvimento sustentável.
         </Text>
       </View>
     </SafeAreaView>

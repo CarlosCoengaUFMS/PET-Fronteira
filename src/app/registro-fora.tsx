@@ -8,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
   Image,
   ScrollView,
 } from 'react-native';
@@ -16,10 +15,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, Stack, router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ThemedView } from '@/components/themed-view';
+import { useAppAlert } from '@/components/app-alert';
 
 import { supabase } from '../utils/supabase';
 
 export default function RegistroForaScreen() {
+  const { mostrarAlerta } = useAppAlert();
   const [form, setForm] = useState({
     nome: '',
     email: '',
@@ -40,7 +41,7 @@ export default function RegistroForaScreen() {
   const escolherFoto = async () => {
     const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissao.granted) {
-      Alert.alert('Permissão negada', 'Precisamos de acesso às suas fotos.');
+      mostrarAlerta({ titulo: 'Permissão negada', mensagem: 'Precisamos de acesso às suas fotos.', tipo: 'erro' });
       return;
     }
 
@@ -57,27 +58,27 @@ export default function RegistroForaScreen() {
 
   const handleRegistro = async () => {
     if (!form.nome || !form.email || !form.senha || !form.confirmarSenha) {
-      Alert.alert('Erro', 'Por favor, preencha todos os campos');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Por favor, preencha todos os campos', tipo: 'erro' });
       return;
     }
 
     if (form.nome.length < 3) {
-      Alert.alert('Erro', 'O nome deve ter no mínimo 3 caracteres');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'O nome deve ter no mínimo 3 caracteres', tipo: 'erro' });
       return;
     }
 
     if (!form.email.includes('@')) {
-      Alert.alert('Erro', 'Por favor, insira um e-mail válido');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Por favor, insira um e-mail válido', tipo: 'erro' });
       return;
     }
 
     if (form.senha.length < 3) {
-      Alert.alert('Erro', 'A senha deve ter no mínimo 3 caracteres');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'A senha deve ter no mínimo 3 caracteres', tipo: 'erro' });
       return;
     }
 
     if (form.senha !== form.confirmarSenha) {
-      Alert.alert('Erro', 'As senhas não coincidem');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'As senhas não coincidem', tipo: 'erro' });
       return;
     }
 
@@ -95,14 +96,13 @@ export default function RegistroForaScreen() {
       });
 
       if (error) {
-        Alert.alert('Erro ao criar conta', error.message);
+        mostrarAlerta({ titulo: 'Erro ao criar conta', mensagem: error.message, tipo: 'erro' });
         return;
       }
 
       if (data.user) {
         let avatarUrl: string | null = null;
 
-        // Se escolheu uma foto, faz o upload antes de criar o registro
         if (fotoLocal) {
           try {
             const resposta = await fetch(fotoLocal.uri);
@@ -137,19 +137,16 @@ export default function RegistroForaScreen() {
         }
       }
 
-      if (Platform.OS === 'web') {
-        window.alert('Conta criada com sucesso! Redirecionando para o login...');
-        router.replace('/login');
-      } else {
-        Alert.alert(
-          'Sucesso!',
-          'Conta criada com sucesso! Faça login para continuar.',
-          [{ text: 'Fazer Login', onPress: () => router.replace('/login') }]
-        );
-      }
+      mostrarAlerta({
+        titulo: 'Conta criada!',
+        mensagem: 'Sua conta foi criada com sucesso. Faça login para continuar.',
+        tipo: 'sucesso',
+        textoBotao: 'Fazer Login',
+      });
+      router.replace('/login');
     } catch (error) {
       console.error('Erro grave de conexão:', error);
-      Alert.alert('Erro', 'Falha ao conectar com o servidor.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Falha ao conectar com o servidor.', tipo: 'erro' });
     } finally {
       setLoading(false);
     }

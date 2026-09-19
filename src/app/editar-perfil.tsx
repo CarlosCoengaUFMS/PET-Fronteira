@@ -8,23 +8,14 @@ import {
   ScrollView,
   Image,
   ActivityIndicator,
-  Alert,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ThemedView } from '@/components/themed-view';
+import { useAppAlert } from '@/components/app-alert';
 
 import { supabase } from '../utils/supabase';
-
-const mostrarAlerta = (titulo: string, mensagem: string) => {
-  if (Platform.OS === 'web') {
-    window.alert(`${titulo}\n\n${mensagem}`);
-  } else {
-    Alert.alert(titulo, mensagem);
-  }
-};
 
 const extensaoDoMime = (mime: string | null | undefined) => {
   if (!mime) return 'jpg';
@@ -33,6 +24,7 @@ const extensaoDoMime = (mime: string | null | undefined) => {
 };
 
 export default function EditarPerfilScreen() {
+  const { mostrarAlerta } = useAppAlert();
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [usuarioId, setUsuarioId] = useState<string | null>(null);
@@ -53,7 +45,7 @@ export default function EditarPerfilScreen() {
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session?.user) {
-      mostrarAlerta('Erro', 'Você precisa estar logado.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Você precisa estar logado.', tipo: 'erro' });
       router.replace('/login');
       return;
     }
@@ -97,7 +89,7 @@ export default function EditarPerfilScreen() {
   const escolherFoto = async () => {
     const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissao.granted) {
-      mostrarAlerta('Permissão negada', 'Precisamos de acesso às suas fotos.');
+      mostrarAlerta({ titulo: 'Permissão negada', mensagem: 'Precisamos de acesso às suas fotos.', tipo: 'erro' });
       return;
     }
 
@@ -122,7 +114,7 @@ export default function EditarPerfilScreen() {
 
   const salvarPerfil = async () => {
     if (!nome.trim()) {
-      mostrarAlerta('Erro', 'Digite seu nome.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: 'Digite seu nome.', tipo: 'erro' });
       return;
     }
 
@@ -175,10 +167,10 @@ export default function EditarPerfilScreen() {
 
       setAvatarUrl(urlFinal);
       setNovaFotoLocal(null);
-      mostrarAlerta('Sucesso', 'Perfil atualizado com sucesso!');
+      mostrarAlerta({ titulo: 'Sucesso', mensagem: 'Perfil atualizado com sucesso!', tipo: 'sucesso' });
     } catch (error: any) {
       console.error(error);
-      mostrarAlerta('Erro', error.message || 'Não foi possível salvar o perfil.');
+      mostrarAlerta({ titulo: 'Erro', mensagem: error.message || 'Não foi possível salvar o perfil.', tipo: 'erro' });
     } finally {
       setSalvando(false);
     }
