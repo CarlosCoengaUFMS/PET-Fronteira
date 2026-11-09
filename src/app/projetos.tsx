@@ -230,6 +230,7 @@ export default function ProjetosScreen() {
   const [logado, setLogado] = useState(false);
   const [usuarioId, setUsuarioId] = useState<string | null>(null);
   const [souTutor, setSouTutor] = useState(false);
+  const [souPetiano, setSouPetiano] = useState(false);
   const [linkProcessado, setLinkProcessado] = useState(false);
 
   const [anoSelecionado, setAnoSelecionado] = useState(2026);
@@ -311,6 +312,7 @@ export default function ProjetosScreen() {
         .eq('id', session.user.id)
         .single();
 
+      setSouPetiano(!!petiano);
       setSouTutor(petiano?.cargo === 'Tutor');
     } else {
       setLogado(false);
@@ -883,7 +885,7 @@ export default function ProjetosScreen() {
             </TouchableOpacity>
 
             <View style={styles.headerRight}>
-              {!projetoSelecionado && logado && (
+              {!projetoSelecionado && souPetiano && (
                 <Link href="/meus-projetos" asChild>
                   <TouchableOpacity style={styles.meusProjetosBtn}>
                     <Text style={styles.meusProjetosBtnText}>Meus Projetos</Text>
@@ -1088,20 +1090,25 @@ export default function ProjetosScreen() {
                   <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 20 }} />
                 ) : (
                   <>
-                    {!souTutor && (
-                      !logado ? (
-                        <TouchableOpacity style={styles.participarBtn} onPress={() => router.push('/login')}>
-                          <Text style={styles.participarBtnText}>Faça login para participar</Text>
-                        </TouchableOpacity>
-                      ) : !souMembro ? (
-                        <TouchableOpacity style={styles.participarBtn} onPress={participarProjeto}>
-                          <Text style={styles.participarBtnText}>Fazer parte do projeto</Text>
-                        </TouchableOpacity>
-                      ) : (
-                        <TouchableOpacity style={styles.sairBtn} onPress={sairDoProjeto}>
-                          <Text style={styles.sairBtnText}>Sair do projeto</Text>
-                        </TouchableOpacity>
-                      )
+                    {/*
+                      Regras do botão de participação:
+                      - Não logado: mostra "Faça login para participar"
+                      - Logado como Tutor: nada (já está automaticamente em todos os projetos)
+                      - Logado mas NÃO é petiano (conta de visitante): nada — só petianos podem entrar
+                      - Logado como petiano comum: "Fazer parte do projeto" ou "Sair do projeto"
+                    */}
+                    {!logado ? (
+                      <TouchableOpacity style={styles.participarBtn} onPress={() => router.push('/login')}>
+                        <Text style={styles.participarBtnText}>Faça login para participar</Text>
+                      </TouchableOpacity>
+                    ) : souTutor ? null : !souPetiano ? null : !souMembro ? (
+                      <TouchableOpacity style={styles.participarBtn} onPress={participarProjeto}>
+                        <Text style={styles.participarBtnText}>Fazer parte do projeto</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity style={styles.sairBtn} onPress={sairDoProjeto}>
+                        <Text style={styles.sairBtnText}>Sair do projeto</Text>
+                      </TouchableOpacity>
                     )}
 
                     <Text style={styles.secaoTitulo}>Integrantes</Text>

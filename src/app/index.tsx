@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useContext, createContext } from 'react';
 import * as Device from 'expo-device';
-import { Platform, StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Modal, Animated, Easing, Linking, ActivityIndicator } from 'react-native';
+import { Platform, StyleSheet, View, Text, TouchableOpacity, Image, Modal, Animated, Easing, Linking, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, Stack, router } from 'expo-router';
 import Svg, { Path, Rect, Circle } from 'react-native-svg';
@@ -11,6 +11,149 @@ import { useAppAlert } from '@/components/app-alert';
 
 // Supabase
 import { supabase } from '../utils/supabase';
+
+// ============================================================
+// ANIMAÇÃO DE REVELAR AO ROLAR (scroll reveal) — REPETE SEMPRE
+// ============================================================
+// Cada <Reveal> começa invisível e levemente deslocado. Quando ele entra na
+// área visível da tela, anima até a posição final (fade + slide/zoom).
+// Quando sai da tela (por cima ou por baixo), volta ao estado inicial, então
+// a animação acontece de novo toda vez que ele reaparecer, subindo ou descendo.
+// A HomeScreen mantém a lista de todos os itens e confere a posição de cada
+// um a cada rolagem.
+
+type DirecaoReveal = 'up' | 'left' | 'right' | 'zoom';
+
+interface ItemReveal {
+  ref: { current: View | null };
+  visivel: boolean;
+  mostrar: () => void;
+  esconder: () => void;
+}
+
+interface RevealContextType {
+  registrar: (item: ItemReveal) => void;
+  remover: (item: ItemReveal) => void;
+}
+
+const RevealContext = createContext<RevealContextType | null>(null);
+
+const Reveal = ({
+  children,
+  direction = 'up',
+  delay = 0,
+  duration = 700,
+  style,
+  onRevelar,
+  onEsconder,
+}: {
+  children: React.ReactNode;
+  direction?: DirecaoReveal;
+  delay?: number;
+  duration?: number;
+  style?: any;
+  onRevelar?: () => void;
+  onEsconder?: () => void;
+}) => {
+  const ctx = useContext(RevealContext);
+  const ref = useRef<View>(null);
+  const progress = useRef(new Animated.Value(0)).current;
+
+  // Guarda as versões mais recentes dos callbacks sem recriar o item
+  const callbacks = useRef({ onRevelar, onEsconder });
+  callbacks.current = { onRevelar, onEsconder };
+
+  useEffect(() => {
+    let animacao: Animated.CompositeAnimation | null = null;
+
+    const item: ItemReveal = {
+      ref,
+      visivel: false,
+      mostrar: () => {
+        if (item.visivel) return;
+        item.visivel = true;
+        animacao?.stop();
+        animacao = Animated.timing(progress, {
+          toValue: 1,
+          duration,
+          delay,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        });
+        animacao.start();
+        callbacks.current.onRevelar?.();
+      },
+      esconder: () => {
+        if (!item.visivel) return;
+        item.visivel = false;
+        animacao?.stop();
+        progress.setValue(0);
+        callbacks.current.onEsconder?.();
+      },
+    };
+
+    if (ctx) {
+      ctx.registrar(item);
+      return () => {
+        animacao?.stop();
+        ctx.remover(item);
+      };
+    }
+
+    // Sem contexto: mostra direto
+    item.mostrar();
+  }, []);
+
+  const sobe = direction === 'up' || direction === 'zoom';
+
+  const translateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [sobe ? (direction === 'zoom' ? 24 : 44) : 0, 0],
+  });
+  const translateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [direction === 'left' ? -44 : direction === 'right' ? 44 : 0, 0],
+  });
+  const scale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [direction === 'zoom' ? 0.9 : 1, 1],
+  });
+
+  return (
+    <Animated.View
+      ref={ref as any}
+      collapsable={false}
+      style={[style, { opacity: progress, transform: [{ translateX }, { translateY }, { scale }] }]}
+    >
+      {children}
+    </Animated.View>
+  );
+};
+
+// Título + subtítulo de seção, aparecendo em sequência
+const CabecalhoSecao = ({
+  titulo,
+  destaque = '.',
+  subtitulo,
+}: {
+  titulo: string;
+  destaque?: string;
+  subtitulo?: string;
+}) => (
+  <>
+    <Reveal>
+      <Text style={styles.sectionTitle}>
+        {titulo}
+        <Text style={styles.orangeHighlight}>{destaque}</Text>
+      </Text>
+    </Reveal>
+    {subtitulo ? (
+      <Reveal delay={120}>
+        <Text style={styles.sectionSubtitle}>{subtitulo}</Text>
+      </Reveal>
+    ) : null}
+  </>
+);
 
 // --- ÍCONES DO HEADER E NAVEGAÇÃO ---
 const MenuIconSvg = () => (
@@ -331,9 +474,61 @@ const ESTATISTICAS: Estatistica[] = [
   { numero: '2213+', label: 'LIVES SAVED', icone: StatLivesIconSvg },
 ];
 
+// --- ITEM DE ESTATÍSTICA: o número "sobe" contando toda vez que aparece na tela ---
+const EstatisticaItem = ({ estat, indice }: { estat: Estatistica; indice: number }) => {
+  const alvo = parseInt(estat.numero.replace(/\D/g, ''), 10) || 0;
+  const sufixo = estat.numero.replace(/[0-9]/g, '');
+  const [valor, setValor] = useState(0);
+  const contador = useRef(new Animated.Value(0)).current;
+  const Icone = estat.icone;
+
+  useEffect(() => {
+    const id = contador.addListener(({ value }) => setValor(Math.round(value)));
+    return () => contador.removeListener(id);
+  }, [contador]);
+
+  const contar = () => {
+    contador.stopAnimation();
+    contador.setValue(0);
+    setValor(0);
+    Animated.timing(contador, {
+      toValue: alvo,
+      duration: 1600,
+      delay: indice * 120,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const zerar = () => {
+    contador.stopAnimation();
+    contador.setValue(0);
+    setValor(0);
+  };
+
+  return (
+    <Reveal
+      style={styles.statItem}
+      direction="zoom"
+      delay={indice * 120}
+      onRevelar={contar}
+      onEsconder={zerar}
+    >
+      <View style={styles.statIconCircle}>
+        <Icone />
+      </View>
+      <View>
+        <Text style={styles.statNumero}>{valor}{sufixo}</Text>
+        <Text style={styles.statLabel}>{estat.label}</Text>
+      </View>
+    </Reveal>
+  );
+};
+
 export default function HomeScreen() {
   const { mostrarAlerta } = useAppAlert();
   const anoAtual = new Date().getFullYear();
+  const { height: alturaJanela } = useWindowDimensions();
 
   const [menuAberto, setMenuAberto] = useState(false);
   const [userMenuAberto, setUserMenuAberto] = useState(false);
@@ -353,7 +548,94 @@ export default function HomeScreen() {
     }).start();
   };
 
+  // ============================================================
+  // CONTROLE DO SCROLL REVEAL (repete sempre)
+  // ============================================================
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const itens = useRef<Set<ItemReveal>>(new Set());
+  const alturaRef = useRef(alturaJanela);
+  alturaRef.current = alturaJanela;
+  const ultimaChecagem = useRef(0);
+  const timerChecagem = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Confere TODOS os itens (não só os pendentes):
+  //  - entrou na área visível e ainda está escondido  -> anima
+  //  - saiu da tela (por cima ou por baixo) e está visível -> volta ao início
+  // Existe uma pequena "zona neutra" entre mostrar e esconder pra não piscar.
+  const checarItens = useCallback(() => {
+    const altura = alturaRef.current;
+    itens.current.forEach((item) => {
+      item.ref.current?.measureInWindow((_x, y, _w, h) => {
+        if (!itens.current.has(item)) return;
+
+        const entrou = y < altura - 60 && y + h > 0;
+        const saiu = y > altura + 10 || y + h < -10;
+
+        if (entrou && !item.visivel) {
+          item.mostrar();
+        } else if (saiu && item.visivel) {
+          item.esconder();
+        }
+      });
+    });
+  }, []);
+
+  // Checagem "atrasada": pega itens que mudaram de lugar (dados carregando,
+  // imagens, etc.) e também a última posição de uma rolagem rápida
+  const agendarChecagem = useCallback(() => {
+    if (timerChecagem.current) clearTimeout(timerChecagem.current);
+    timerChecagem.current = setTimeout(checarItens, 60);
+  }, [checarItens]);
+
+  const revealCtx = useMemo<RevealContextType>(
+    () => ({
+      registrar: (item) => {
+        itens.current.add(item);
+        agendarChecagem();
+      },
+      remover: (item) => {
+        itens.current.delete(item);
+      },
+    }),
+    [agendarChecagem]
+  );
+
+  const aoRolar = useMemo(
+    () =>
+      Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+        useNativeDriver: false,
+        listener: () => {
+          const agora = Date.now();
+          if (agora - ultimaChecagem.current > 40) {
+            ultimaChecagem.current = agora;
+            checarItens();
+          }
+          agendarChecagem();
+        },
+      }),
+    [checarItens, agendarChecagem, scrollY]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (timerChecagem.current) clearTimeout(timerChecagem.current);
+    };
+  }, []);
+
+  // Parallax suave do hero: ao rolar, o conteúdo sobe mais devagar e esmaece
+  const heroTranslate = scrollY.interpolate({
+    inputRange: [0, 400],
+    outputRange: [0, 80],
+    extrapolate: 'clamp',
+  });
+  const heroOpacity = scrollY.interpolate({
+    inputRange: [0, 380],
+    outputRange: [1, 0.15],
+    extrapolate: 'clamp',
+  });
+
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [souPetiano, setSouPetiano] = useState(false);
   const [userData, setUserData] = useState({
     nome: '',
     email: '',
@@ -433,7 +715,10 @@ export default function HomeScreen() {
     });
   };
 
-  const atualizarDadosDoUsuario = (session: any) => {
+  // Além de guardar os dados básicos do usuário logado, verifica se ele
+  // tem uma linha na tabela "petianos" — só quem faz parte do PET vê
+  // o botão "Meus Projetos"
+  const atualizarDadosDoUsuario = async (session: any) => {
     if (session?.user) {
       setIsLoggedIn(true);
       setUserData({
@@ -442,8 +727,17 @@ export default function HomeScreen() {
         cargo: session.user.user_metadata?.cargo || 'Membro',
         avatar: session.user.user_metadata?.avatar_url || null
       });
+
+      const { data: petiano } = await supabase
+        .from('petianos')
+        .select('id')
+        .eq('id', session.user.id)
+        .single();
+
+      setSouPetiano(!!petiano);
     } else {
       setIsLoggedIn(false);
+      setSouPetiano(false);
       setUserData({ nome: '', email: '', cargo: '', avatar: null });
     }
   };
@@ -470,7 +764,7 @@ export default function HomeScreen() {
   };
 
   return (
-    <>
+    <RevealContext.Provider value={revealCtx}>
       <Stack.Screen
         options={{
           title: 'PET Fronteira',
@@ -633,170 +927,195 @@ export default function HomeScreen() {
           </Modal>
 
           {/* --- CONTEÚDO PRINCIPAL --- */}
-          <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+          <Animated.ScrollView
+            contentContainerStyle={styles.scrollContainer}
+            showsVerticalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onScroll={aoRolar}
+            onContentSizeChange={agendarChecagem}
+          >
 
-            {/* Hero Section */}
+            {/* Hero Section: entra em sequência e tem parallax ao rolar */}
             <View style={styles.hero}>
-              <Text style={styles.heroTitle}>PET Fronteira do Campus de Ponta Porã</Text>
-              <Text style={styles.heroSubtitle}>Unindo forças pela educação, cultura e desenvolvimento da região de fronteira</Text>
+              <Animated.View
+                style={styles.heroConteudo}
+              >
+                <Animated.View
+                  style={{ alignItems: 'center', opacity: heroOpacity, transform: [{ translateY: heroTranslate }] }}
+                >
+                  <Reveal duration={900}>
+                    <Text style={styles.heroTitle}>PET Fronteira do Campus de Ponta Porã</Text>
+                  </Reveal>
 
-              <View style={styles.heroButtonsWrapper}>
-                <View style={styles.heroButtons}>
-                  <Link href="/projetos" asChild>
-                    <TouchableOpacity style={styles.btnPrimary}>
-                      <Text style={styles.btnPrimaryText}>Ver Projetos</Text>
-                    </TouchableOpacity>
-                  </Link>
-                  <Link href="/eventos" asChild>
-                    <TouchableOpacity style={styles.btnSecondary}>
-                      <Text style={styles.btnSecondaryText}>Eventos</Text>
-                    </TouchableOpacity>
-                  </Link>
-                </View>
+                  <Reveal delay={180} duration={900}>
+                    <Text style={styles.heroSubtitle}>Unindo forças pela educação, cultura e desenvolvimento da região de fronteira</Text>
+                  </Reveal>
 
-                {isLoggedIn && (
-                  <View style={styles.heroButtons}>
-                    <Link href="/meus-projetos" asChild>
-                      <TouchableOpacity style={styles.btnSecondary}>
-                        <Text style={styles.btnSecondaryText}>Meus Projetos</Text>
-                      </TouchableOpacity>
-                    </Link>
-                    <Link href="/relatorios" asChild>
-                      <TouchableOpacity style={styles.btnSecondary}>
-                        <Text style={styles.btnSecondaryText}>Relatórios</Text>
-                      </TouchableOpacity>
-                    </Link>
+                  <View style={styles.heroButtonsWrapper}>
+                    <Reveal delay={360} direction="zoom">
+                      <View style={styles.heroButtons}>
+                        <Link href="/projetos" asChild>
+                          <TouchableOpacity style={styles.btnPrimary}>
+                            <Text style={styles.btnPrimaryText}>Ver Projetos</Text>
+                          </TouchableOpacity>
+                        </Link>
+                        <Link href="/eventos" asChild>
+                          <TouchableOpacity style={styles.btnSecondary}>
+                            <Text style={styles.btnSecondaryText}>Eventos</Text>
+                          </TouchableOpacity>
+                        </Link>
+                      </View>
+                    </Reveal>
+
+                    {isLoggedIn && (
+                      <Reveal delay={480} direction="zoom">
+                        <View style={styles.heroButtons}>
+                          {/* Só aparece pra quem faz parte do PET (existe na tabela petianos) */}
+                          {souPetiano && (
+                            <Link href="/meus-projetos" asChild>
+                              <TouchableOpacity style={styles.btnSecondary}>
+                                <Text style={styles.btnSecondaryText}>Meus Projetos</Text>
+                              </TouchableOpacity>
+                            </Link>
+                          )}
+                          <Link href="/relatorios" asChild>
+                            <TouchableOpacity style={styles.btnSecondary}>
+                              <Text style={styles.btnSecondaryText}>Relatórios</Text>
+                            </TouchableOpacity>
+                          </Link>
+                        </View>
+                      </Reveal>
+                    )}
                   </View>
-                )}
-              </View>
+                </Animated.View>
+              </Animated.View>
             </View>
 
             {/* Boas-vindas para usuários logados */}
             {isLoggedIn && userData.nome && (
               <View style={styles.welcomeSection}>
-                <View style={styles.welcomeAvatarContainer}>
+                <Reveal direction="zoom" style={styles.welcomeAvatarContainer}>
                   {userData.avatar ? (
                     <Image source={{ uri: userData.avatar }} style={styles.welcomeAvatar} />
                   ) : (
                     <UserIconSvg size={50} />
                   )}
-                </View>
-                <Text style={styles.welcomeTitle}>Bem-vindo de volta, {userData.nome.split(' ')[0]}!</Text>
-                <Text style={styles.welcomeText}>Confira as novidades e projetos do PET Fronteira</Text>
+                </Reveal>
+                <Reveal delay={120}>
+                  <Text style={styles.welcomeTitle}>Bem-vindo de volta, {userData.nome.split(' ')[0]}!</Text>
+                </Reveal>
+                <Reveal delay={220}>
+                  <Text style={styles.welcomeText}>Confira as novidades e projetos do PET Fronteira</Text>
+                </Reveal>
               </View>
             )}
 
             {/* --- SEÇÃO: QUEM SOMOS --- */}
             <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>
-                Quem somos<Text style={styles.orangeHighlight}>?</Text>
-              </Text>
-              <Text style={styles.sectionSubtitle}>
-                Conheça o Programa de Educação Tutorial (PET) da UFMS.
-              </Text>
+              <CabecalhoSecao
+                titulo="Quem somos"
+                destaque="?"
+                subtitulo="Conheça o Programa de Educação Tutorial (PET) da UFMS."
+              />
 
               <View style={styles.aboutCardsContainer}>
-                <View style={styles.aboutCard}>
+                <Reveal direction="left" style={styles.aboutCard}>
                   <Text style={styles.aboutCardText}>
                     O Programa de Educação Tutorial (PET) é uma iniciativa do Ministério da Educação (MEC) criado para promover a indissociabilidade entre ensino, pesquisa e extensão nas universidades brasileiras. Na UFMS, o PET visa aprimorar a formação acadêmica dos estudantes, estimulando o desenvolvimento de habilidades críticas e criativas.
                   </Text>
-                </View>
+                </Reveal>
 
-                <View style={styles.aboutCard}>
+                <Reveal direction="right" delay={120} style={styles.aboutCard}>
                   <Text style={styles.aboutCardText}>
                     O PET Fronteira é um grupo de Programa de Educação Tutorial que atua na integração entre ensino, pesquisa e extensão. Nosso objetivo é proporcionar experiências enriquecedoras aos petianos, desenvolvendo projetos inovadores que impactam positivamente a comunidade acadêmica e a sociedade. Trabalhamos com autonomia, responsabilidade e espírito colaborativo, sempre em sintonia com os princípios da universidade pública.
                   </Text>
-                </View>
+                </Reveal>
               </View>
             </View>
 
             {/* --- SEÇÃO: O QUE O PET PROPORCIONA --- */}
             <View style={[styles.sectionContainer, styles.sectionAltBg]}>
-              <Text style={styles.sectionTitle}>
-                O que o PET proporciona<Text style={styles.orangeHighlight}>?</Text>
-              </Text>
-              <Text style={styles.sectionSubtitle}>
-                Essas são algumas das principais vantagens e experiências que o PET oferece.
-              </Text>
+              <CabecalhoSecao
+                titulo="O que o PET proporciona"
+                destaque="?"
+                subtitulo="Essas são algumas das principais vantagens e experiências que o PET oferece."
+              />
 
               <View style={styles.featuresGrid}>
-                <View style={styles.featureItem}>
+                <Reveal style={styles.featureItem} direction="zoom" delay={0}>
                   <View style={styles.featureIconContainer}><SearchIcon /></View>
                   <View style={styles.featureTextContent}>
                     <Text style={styles.featureTitle}>Projetos de Pesquisa</Text>
                     <Text style={styles.featureDesc}>Desenvolvimento de estudos científicos em áreas de interesse do grupo.</Text>
                   </View>
-                </View>
+                </Reveal>
 
-                <View style={styles.featureItem}>
+                <Reveal style={styles.featureItem} direction="zoom" delay={100}>
                   <View style={styles.featureIconContainer}><EaselIcon /></View>
                   <View style={styles.featureTextContent}>
                     <Text style={styles.featureTitle}>Eventos Científicos</Text>
                     <Text style={styles.featureDesc}>Envolvimento em seminários, feiras e encontros de pesquisa.</Text>
                   </View>
-                </View>
+                </Reveal>
 
-                <View style={styles.featureItem}>
+                <Reveal style={styles.featureItem} direction="zoom" delay={200}>
                   <View style={styles.featureIconContainer}><PeopleIcon /></View>
                   <View style={styles.featureTextContent}>
                     <Text style={styles.featureTitle}>Projetos de Extensão</Text>
                     <Text style={styles.featureDesc}>Ações junto à comunidade para aplicar os conhecimentos adquiridos no curso.</Text>
                   </View>
-                </View>
+                </Reveal>
 
-                <View style={styles.featureItem}>
+                <Reveal style={styles.featureItem} direction="zoom" delay={0}>
                   <View style={styles.featureIconContainer}><DocumentIcon /></View>
                   <View style={styles.featureTextContent}>
                     <Text style={styles.featureTitle}>Projetos de Ensino</Text>
                     <Text style={styles.featureDesc}>Estratégias inovadoras voltadas ao aprimoramento do processo de ensino-aprendizagem.</Text>
                   </View>
-                </View>
+                </Reveal>
 
-                <View style={styles.featureItem}>
+                <Reveal style={styles.featureItem} direction="zoom" delay={100}>
                   <View style={styles.featureIconContainer}><ToolsIcon /></View>
                   <View style={styles.featureTextContent}>
                     <Text style={styles.featureTitle}>Oficinas</Text>
                     <Text style={styles.featureDesc}>Atividades práticas e dinâmicas para desenvolvimento de habilidades acadêmicas e profissionais.</Text>
                   </View>
-                </View>
+                </Reveal>
 
-                <View style={styles.featureItem}>
+                <Reveal style={styles.featureItem} direction="zoom" delay={200}>
                   <View style={styles.featureIconContainer}><MicIcon /></View>
                   <View style={styles.featureTextContent}>
                     <Text style={styles.featureTitle}>Palestras</Text>
                     <Text style={styles.featureDesc}>Eventos com convidados para discutir temas relevantes da área, atualidades e mercado de trabalho.</Text>
                   </View>
-                </View>
+                </Reveal>
 
-                <View style={styles.featureItem}>
+                <Reveal style={styles.featureItem} direction="zoom" delay={0}>
                   <View style={styles.featureIconContainer}><MonitorIcon /></View>
                   <View style={styles.featureTextContent}>
                     <Text style={styles.featureTitle}>Monitorias</Text>
                     <Text style={styles.featureDesc}>Apoio contínuo em disciplinas, auxiliando colegas com dúvidas e práticas de aprendizado.</Text>
                   </View>
-                </View>
+                </Reveal>
 
-                <View style={styles.featureItem}>
+                <Reveal style={styles.featureItem} direction="zoom" delay={100}>
                   <View style={styles.featureIconContainer}><DollarIcon /></View>
                   <View style={styles.featureTextContent}>
                     <Text style={styles.featureTitle}>Ajuda financeira para bolsistas</Text>
                     <Text style={styles.featureDesc}>Bolsa auxílio para membros bolsistas.</Text>
                   </View>
-                </View>
+                </Reveal>
               </View>
             </View>
 
             {/* --- SEÇÃO: TUTOR --- */}
             <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>
-                Tutor<Text style={styles.orangeHighlight}>.</Text>
-              </Text>
-              <Text style={styles.sectionSubtitle}>Conheça nosso professor tutor atual</Text>
+              <CabecalhoSecao titulo="Tutor" subtitulo="Conheça nosso professor tutor atual" />
 
               {carregandoPerfis ? (
                 <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 20 }} />
               ) : tutor ? (
-                <View style={styles.tutorCard}>
+                <Reveal direction="zoom" style={styles.tutorCard}>
                   <View style={styles.tutorAvatarContainer}>
                     {tutor.avatar_url ? (
                       <Image source={{ uri: tutor.avatar_url }} style={styles.tutorAvatarImage} />
@@ -822,7 +1141,7 @@ export default function HomeScreen() {
                       </TouchableOpacity>
                     </View>
                   </View>
-                </View>
+                </Reveal>
               ) : (
                 <Text style={styles.emptyText}>Nenhum tutor cadastrado ainda.</Text>
               )}
@@ -830,17 +1149,14 @@ export default function HomeScreen() {
 
             {/* --- SEÇÃO: MEMBROS --- */}
             <View style={[styles.sectionContainer, styles.sectionAltBg]}>
-              <Text style={styles.sectionTitle}>
-                Membros<Text style={styles.orangeHighlight}>.</Text>
-              </Text>
-              <Text style={styles.sectionSubtitle}>Conheça nossos petianos</Text>
+              <CabecalhoSecao titulo="Membros" subtitulo="Conheça nossos petianos" />
 
               {carregandoPerfis ? (
                 <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 20 }} />
               ) : membros.length > 0 ? (
                 <View style={styles.membrosGrid}>
-                  {membros.map((membro) => (
-                    <View key={membro.id} style={styles.membroCard}>
+                  {membros.map((membro, index) => (
+                    <Reveal key={membro.id} style={styles.membroCard} delay={(index % 4) * 90}>
                       {membro.avatar_url ? (
                         <Image source={{ uri: membro.avatar_url }} style={styles.membroAvatarImage} />
                       ) : (
@@ -848,7 +1164,7 @@ export default function HomeScreen() {
                       )}
                       <Text style={styles.membroNome}>{membro.nome}</Text>
                       <Text style={styles.membroCurso}>{membro.cargo}</Text>
-                    </View>
+                    </Reveal>
                   ))}
                 </View>
               ) : (
@@ -858,48 +1174,49 @@ export default function HomeScreen() {
 
             {/* --- SEÇÃO: PROJETOS ATUAIS EM ANDAMENTO --- */}
             <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>
-                Projetos Atuais em Andamento<Text style={styles.orangeHighlight}>.</Text>
-              </Text>
-              <Text style={styles.sectionSubtitle}>Conheça as principais iniciativas do PET em execução em {anoAtual}.</Text>
+              <CabecalhoSecao
+                titulo="Projetos Atuais em Andamento"
+                subtitulo={`Conheça as principais iniciativas do PET em execução em ${anoAtual}.`}
+              />
 
               {carregandoProjetosAtuais ? (
                 <ActivityIndicator color="#F0502D" size="large" style={{ marginVertical: 20 }} />
               ) : projetosAtuais.length > 0 ? (
                 <>
                   <View style={styles.projetosGrid}>
-                    {projetosAtuais.map((projeto) => (
-                      <TouchableOpacity
-                        key={projeto.uuid}
-                        style={styles.projetoCard}
-                        onPress={() => abrirProjetoAtual(projeto)}
-                      >
-                        {projeto.imagem_url ? (
-                          <Image source={{ uri: projeto.imagem_url }} style={styles.projetoImagem} resizeMode="cover" />
-                        ) : (
-                          <View style={styles.projetoImagemPlaceholder}>
-                            <FolderIconSvg />
-                          </View>
-                        )}
-                        <Text style={styles.projetoNome}>{projeto.titulo}</Text>
-                        {projeto.descricao ? (
-                          <Text style={styles.projetoDesc} numberOfLines={3}>{projeto.descricao}</Text>
-                        ) : null}
-                      </TouchableOpacity>
+                    {projetosAtuais.map((projeto, index) => (
+                      <Reveal key={projeto.uuid} style={styles.projetoWrapper} delay={(index % 4) * 110}>
+                        <TouchableOpacity
+                          style={styles.projetoCard}
+                          onPress={() => abrirProjetoAtual(projeto)}
+                        >
+                          {projeto.imagem_url ? (
+                            <Image source={{ uri: projeto.imagem_url }} style={styles.projetoImagem} resizeMode="cover" />
+                          ) : (
+                            <View style={styles.projetoImagemPlaceholder}>
+                              <FolderIconSvg />
+                            </View>
+                          )}
+                          <Text style={styles.projetoNome}>{projeto.titulo}</Text>
+                          {projeto.descricao ? (
+                            <Text style={styles.projetoDesc} numberOfLines={3}>{projeto.descricao}</Text>
+                          ) : null}
+                        </TouchableOpacity>
+                      </Reveal>
                     ))}
                   </View>
 
                   {/* Wrapper com View evita passar array de estilos direto pro filho do Link (Slot) */}
-                  <View style={styles.verTodosWrapper}>
+                  <Reveal style={styles.verTodosWrapper} direction="zoom">
                     <Link href="/projetos" asChild>
                       <TouchableOpacity style={styles.btnSecondary}>
                         <Text style={styles.btnSecondaryText}>Ver todos os projetos</Text>
                       </TouchableOpacity>
                     </Link>
-                  </View>
+                  </Reveal>
                 </>
               ) : (
-                <View style={styles.projetosEmptyState}>
+                <Reveal direction="zoom" style={styles.projetosEmptyState}>
                   <FolderIconSvg />
                   <Text style={styles.emptyText}>Nenhum projeto cadastrado para {anoAtual} ainda.</Text>
                   <Link href="/projetos" asChild>
@@ -907,65 +1224,59 @@ export default function HomeScreen() {
                       <Text style={styles.btnSecondaryText}>Ver página de Projetos</Text>
                     </TouchableOpacity>
                   </Link>
-                </View>
+                </Reveal>
               )}
             </View>
 
-            {/* --- SEÇÃO: ESTATÍSTICAS --- */}
+            {/* --- SEÇÃO: ESTATÍSTICAS (números contam de 0 até o valor, toda vez que aparecem) --- */}
             <View style={[styles.sectionContainer, styles.sectionAltBg, styles.statsSection]}>
               <View style={styles.statsRow}>
-                {ESTATISTICAS.map((estat, index) => {
-                  const Icone = estat.icone;
-                  return (
-                    <View key={index} style={styles.statItem}>
-                      <View style={styles.statIconCircle}>
-                        <Icone />
-                      </View>
-                      <View>
-                        <Text style={styles.statNumero}>{estat.numero}</Text>
-                        <Text style={styles.statLabel}>{estat.label}</Text>
-                      </View>
-                    </View>
-                  );
-                })}
+                {ESTATISTICAS.map((estat, index) => (
+                  <EstatisticaItem key={index} estat={estat} indice={index} />
+                ))}
               </View>
             </View>
 
             {/* --- SEÇÃO: NORMAS E MANUAIS --- */}
             <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>Normas e Manuais</Text>
-              <Text style={styles.sectionSubtitle}>Consulte aqui as normas do Programa de Educação Tutorial (PET)</Text>
+              <CabecalhoSecao
+                titulo="Normas e Manuais"
+                destaque=""
+                subtitulo="Consulte aqui as normas do Programa de Educação Tutorial (PET)"
+              />
 
               <View style={styles.normasButtonsRow}>
-                <TouchableOpacity
-                  style={styles.normaBtn}
-                  onPress={() => abrirLink(LINK_NORMAS)}
-                >
-                  <DownloadIconSvg />
-                  <Text style={styles.normaBtnText}>Baixar PDF das NORMAS</Text>
-                </TouchableOpacity>
+                <Reveal direction="left">
+                  <TouchableOpacity
+                    style={styles.normaBtn}
+                    onPress={() => abrirLink(LINK_NORMAS)}
+                  >
+                    <DownloadIconSvg />
+                    <Text style={styles.normaBtnText}>Baixar PDF das NORMAS</Text>
+                  </TouchableOpacity>
+                </Reveal>
 
-                <TouchableOpacity
-                  style={styles.normaBtn}
-                  onPress={() => abrirLink(LINK_MANUAL)}
-                >
-                  <DownloadIconSvg />
-                  <Text style={styles.normaBtnText}>Baixar MANUAL do Pet</Text>
-                </TouchableOpacity>
+                <Reveal direction="right" delay={120}>
+                  <TouchableOpacity
+                    style={styles.normaBtn}
+                    onPress={() => abrirLink(LINK_MANUAL)}
+                  >
+                    <DownloadIconSvg />
+                    <Text style={styles.normaBtnText}>Baixar MANUAL do Pet</Text>
+                  </TouchableOpacity>
+                </Reveal>
               </View>
             </View>
 
             {/* --- SEÇÃO: DÚVIDAS FREQUENTES --- */}
             <View style={[styles.sectionContainer, styles.sectionAltBg]}>
-              <Text style={styles.sectionTitle}>
-                Dúvidas Frequentes<Text style={styles.orangeHighlight}>.</Text>
-              </Text>
+              <CabecalhoSecao titulo="Dúvidas Frequentes" />
 
               <View style={styles.faqColumnFull}>
                 {DUVIDAS_FREQUENTES.map((duvida, index) => {
                   const aberta = duvidaAberta === index;
                   return (
-                    <View key={index} style={styles.faqItem}>
+                    <Reveal key={index} style={styles.faqItem} delay={index * 80}>
                       <TouchableOpacity
                         style={styles.faqQuestionRow}
                         onPress={() => toggleDuvida(index)}
@@ -980,13 +1291,13 @@ export default function HomeScreen() {
                           {duvida.resposta ? duvida.resposta : 'Em breve mais informações sobre este tópico.'}
                         </Text>
                       )}
-                    </View>
+                    </Reveal>
                   );
                 })}
               </View>
             </View>
 
-          </ScrollView>
+          </Animated.ScrollView>
 
           {/* --- FOOTER FLUTUANTE FIXO (fora do ScrollView) --- */}
           <View style={styles.footerOverlay} pointerEvents="box-none">
@@ -1013,8 +1324,6 @@ export default function HomeScreen() {
                   <Text style={styles.footerTitle}>PET Fronteira</Text>
                   <Text style={styles.footerText}>UFMS Universidade Federal de Mato Grosso do Sul</Text>
                   <Text style={styles.footerText}>Campus de Ponta Porã</Text>
-
-                  
                 </View>
 
                 <View style={styles.footerSection}>
@@ -1061,7 +1370,6 @@ export default function HomeScreen() {
                     >
                       <FacebookIconSvg size={22} />
                     </TouchableOpacity>
-                    
 
                     {/* Instagram */}
                     <TouchableOpacity
@@ -1071,9 +1379,9 @@ export default function HomeScreen() {
                       <InstagramIconSvg size={22} />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.footerPhoneRow} onPress={() => abrirLink(TELEFONE_LINK)}>
-                    <PhoneIconSvg size={14} />
-                    <Text style={styles.footerPhoneText}>{TELEFONE_DISPLAY}</Text>
-                  </TouchableOpacity>
+                      <PhoneIconSvg size={14} />
+                      <Text style={styles.footerPhoneText}>{TELEFONE_DISPLAY}</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               </View>
@@ -1096,7 +1404,7 @@ export default function HomeScreen() {
 
         </SafeAreaView>
       </ThemedView>
-    </>
+    </RevealContext.Provider>
   );
 }
 
@@ -1148,7 +1456,8 @@ const styles = StyleSheet.create({
   logoutButton: { flexDirection: 'row', alignItems: 'center', padding: 15, backgroundColor: '#F0502D', borderRadius: 10, gap: 15, justifyContent: 'center' },
   logoutButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
 
-  hero: { backgroundColor: '#2a2b3d', padding: 40, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 4, borderBottomColor: '#F0502D' },
+  hero: { backgroundColor: '#2a2b3d', paddingVertical: 70, paddingHorizontal: 30, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 4, borderBottomColor: '#F0502D', overflow: 'hidden' },
+  heroConteudo: { alignItems: 'center', width: '100%' },
   heroTitle: { color: '#FFFFFF', fontSize: 28, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
   heroSubtitle: { color: '#DDDDDD', fontSize: 16, textAlign: 'center', marginBottom: 25 },
   heroButtonsWrapper: { alignItems: 'center', gap: 15 },
@@ -1157,10 +1466,10 @@ const styles = StyleSheet.create({
   welcomeSection: { padding: 25, alignItems: 'center' },
   welcomeAvatarContainer: { marginBottom: 15 },
   welcomeAvatar: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#F0502D' },
-  welcomeTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: 'bold', marginBottom: 8 },
+  welcomeTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' },
   welcomeText: { color: '#CCCCCC', fontSize: 16, textAlign: 'center' },
 
-  sectionContainer: { paddingVertical: 45, paddingHorizontal: 20, alignItems: 'center' },
+  sectionContainer: { paddingVertical: 60, paddingHorizontal: 20, alignItems: 'center', overflow: 'hidden' },
   sectionAltBg: { backgroundColor: '#161724', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#2a2b3d' },
   sectionTitle: { color: '#FFFFFF', fontSize: 26, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
   orangeHighlight: { color: '#F0502D' },
@@ -1171,7 +1480,7 @@ const styles = StyleSheet.create({
   aboutCard: { backgroundColor: '#1c1d2b', padding: 22, borderRadius: 12, borderWidth: 1, borderColor: '#2a2b3d' },
   aboutCardText: { color: '#DDDDDD', fontSize: 14, lineHeight: 22, textAlign: 'justify' },
 
-  featuresGrid: { width: '100%', maxWidth: 900, gap: 16, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
+  featuresGrid: { width: '100%', maxWidth: 900, gap: 24, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
   featureItem: { flexDirection: 'row', width: '31%', minWidth: 260, alignItems: 'flex-start', gap: 12 },
   featureIconContainer: { width: 48, height: 48, borderRadius: 10, backgroundColor: 'rgba(240, 80, 45, 0.1)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(240, 80, 45, 0.2)' },
   featureTextContent: { flex: 1 },
@@ -1252,6 +1561,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 18,
   },
+  projetoWrapper: { width: 220 },
   projetoCard: {
     width: 220,
     backgroundColor: '#1c1d2b',
@@ -1283,10 +1593,10 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 500,
   },
-  verTodosWrapper: { marginTop: 24 },
+  verTodosWrapper: { marginTop: 28 },
 
   // --- ESTATÍSTICAS ---
-  statsSection: { paddingVertical: 35 },
+  statsSection: { paddingVertical: 45 },
   statsRow: {
     width: '100%',
     maxWidth: 950,
@@ -1324,7 +1634,7 @@ const styles = StyleSheet.create({
   normaBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
 
   // --- FAQ ---
-  faqColumnFull: { width: '100%', maxWidth: 700 },
+  faqColumnFull: { width: '100%', maxWidth: 700, marginTop: 20 },
   faqItem: { borderBottomWidth: 1, borderBottomColor: '#2a2b3d', paddingVertical: 14 },
   faqQuestionRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   faqQuestionText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600', flex: 1 },
